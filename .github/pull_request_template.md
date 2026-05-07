@@ -8,7 +8,8 @@
 - [ ] @testivai/common
 - [ ] @testivai/witness
 - [ ] @testivai/witness-playwright
-- [ ] GitHub Action
+- [ ] @testivai/witness-webdriverio
+- [ ] GitHub Action (`action/`)
 - [ ] Examples / docs / CI only
 
 ## Checklist
@@ -16,6 +17,7 @@
 - [ ] `pnpm test` passes
 - [ ] `pnpm pack:dry` shows only expected files
 - [ ] `pnpm e2e` passes
+- [ ] If a published package changed, I ran `pnpm changeset` and committed the changeset file
 - [ ] No breaking changes (or I've noted them in the description + bumped the major)
 
 ## Notes for reviewers

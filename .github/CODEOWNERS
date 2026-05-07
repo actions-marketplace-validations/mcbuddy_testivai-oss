@@ -1,15 +1,18 @@
 # Default owner for everything
-*                           @testivai/maintainers
+*                           @mcbuddy
 
 # Package-specific owners
-/packages/common/           @testivai/maintainers
-/packages/witness/          @testivai/maintainers
-/packages/playwright/       @testivai/maintainers
-/action/                    @testivai/maintainers
+/packages/common/           @mcbuddy
+/packages/witness/          @mcbuddy
+/packages/playwright/       @mcbuddy
+/packages/webdriverio/      @mcbuddy
+/action/                    @mcbuddy
 
 # Docs
-/docs/                      @testivai/maintainers
+/docs/                      @mcbuddy
 
 # CI / release
-/.github/                   @testivai/maintainers
-/CUTOVER.md                 @testivai/maintainers
+/.github/                   @mcbuddy
+/CUTOVER.md                 @mcbuddy
+/CONTRIBUTING.md            @mcbuddy
+/SECURITY.md                @mcbuddy
