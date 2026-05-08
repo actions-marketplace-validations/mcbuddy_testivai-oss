@@ -1,5 +1,11 @@
 node_modules/
 dist/
+# GitHub Actions are consumed at runtime via `uses: <repo>@<ref>` and run
+# `dist/index.js` directly from the checked-out source. The action MUST
+# ship its bundled dist/ in git. CI guards that the committed dist/ is
+# up-to-date with src/ on every PR. See action/README.md.
+!action/dist/
+!action/dist/**
 coverage/
 .testivai/
 *.tgz

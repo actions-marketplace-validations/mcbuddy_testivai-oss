@@ -77,4 +77,110 @@ describe('buildComment', () => {
     const comment = buildEmptyComment();
     expect(comment).toContain('No visual snapshots were captured');
   });
+
+  it('renders new-snapshots section when present', () => {
+    const results: ResultsData = {
+      timestamp: Date.now(),
+      summary: { total: 1, passed: 0, changed: 0, newSnapshots: 1 },
+      snapshots: [
+        { id: '1', name: 'fresh-baseline', status: 'new', currentPath: 'fresh.png' },
+      ],
+    };
+    const comment = buildComment(results);
+    expect(comment).toContain('#### New Snapshots');
+    expect(comment).toContain('`fresh-baseline`');
+  });
+
+  it('accepts diffPercent (new) and diffPercentage (legacy) interchangeably', () => {
+    const newField: ResultsData = {
+      timestamp: Date.now(),
+      summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+      snapshots: [
+        { id: '1', name: 'a', status: 'changed', diffPercent: 7.5, currentPath: 'a.png' },
+      ],
+    };
+    const legacyField: ResultsData = {
+      timestamp: Date.now(),
+      summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+      snapshots: [
+        { id: '1', name: 'a', status: 'changed', diffPercentage: 7.5, currentPath: 'a.png' },
+      ],
+    };
+    expect(buildComment(newField)).toContain('7.50% different');
+    expect(buildComment(legacyField)).toContain('7.50% different');
+  });
+
+  describe('DOM noise hint in PR comment', () => {
+    it('renders "DOM unchanged" hint when noiseHint is true', () => {
+      const results: ResultsData = {
+        timestamp: Date.now(),
+        summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+        snapshots: [
+          {
+            id: '1',
+            name: 'noisy',
+            status: 'changed',
+            diffPercent: 0.5,
+            currentPath: 'noisy.png',
+            dom: { changed: false, summary: null, noiseHint: true },
+          },
+        ],
+      };
+      const comment = buildComment(results);
+      expect(comment).toContain('DOM unchanged');
+      expect(comment).toContain('likely render noise');
+    });
+
+    it('renders "DOM changed" hint with counts when noiseHint is false', () => {
+      const results: ResultsData = {
+        timestamp: Date.now(),
+        summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+        snapshots: [
+          {
+            id: '1',
+            name: 'real-change',
+            status: 'changed',
+            diffPercent: 12,
+            currentPath: 'rc.png',
+            dom: {
+              changed: true,
+              summary: { added: 2, removed: 0, attributeChanges: 1 },
+              noiseHint: false,
+            },
+          },
+        ],
+      };
+      const comment = buildComment(results);
+      expect(comment).toContain('DOM changed');
+      expect(comment).toContain('2 added');
+      expect(comment).toContain('1 attribute change');
+    });
+
+    it('omits DOM hint when snapshot has no dom data', () => {
+      const results: ResultsData = {
+        timestamp: Date.now(),
+        summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+        snapshots: [
+          { id: '1', name: 'no-dom', status: 'changed', diffPercent: 5, currentPath: 'x.png' },
+        ],
+      };
+      const comment = buildComment(results);
+      expect(comment).not.toContain('DOM unchanged');
+      expect(comment).not.toContain('DOM changed');
+    });
+
+    it('singular vs plural attribute-change wording', () => {
+      const buildWith = (count: number): string => buildComment({
+        timestamp: Date.now(),
+        summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+        snapshots: [{
+          id: '1', name: 'x', status: 'changed', diffPercent: 1, currentPath: 'x.png',
+          dom: { changed: true, summary: { added: 0, removed: 0, attributeChanges: count }, noiseHint: false },
+        }],
+      });
+      expect(buildWith(1)).toContain('1 attribute change');
+      expect(buildWith(1)).not.toContain('1 attribute changes');
+      expect(buildWith(3)).toContain('3 attribute changes');
+    });
+  });
 });

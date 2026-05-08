@@ -7,6 +7,37 @@ import { ResultsData, SnapshotResult } from './types';
 const UPSERT_MARKER = '<!-- testivai-visual-report -->';
 
 /**
+ * Format the diff percentage for a snapshot, accepting both the new
+ * (`diffPercent`) and older (`diffPercentage`) field names.
+ */
+function formatDiffPercent(snapshot: SnapshotResult): string {
+  const value = snapshot.diffPercent ?? snapshot.diffPercentage ?? 0;
+  return value.toFixed(2);
+}
+
+/**
+ * Render the DOM noise hint inside the <details> body for a changed
+ * snapshot. Mirrors the witness HTML report wording so reviewers see
+ * the same signal in the PR comment.
+ *
+ * Returns empty string when the snapshot has no DOM data — better than
+ * a confusing "no signal available" line.
+ */
+function renderDomHintMarkdown(snapshot: SnapshotResult): string {
+  if (!snapshot.dom) return '';
+  if (snapshot.dom.noiseHint) {
+    return `> 💡 **DOM unchanged** — pixel diff is likely render noise (anti-aliasing, font hinting).\n\n`;
+  }
+  const s = snapshot.dom.summary;
+  if (!s) return '';
+  const parts: string[] = [];
+  if (s.added > 0) parts.push(`${s.added} added`);
+  if (s.removed > 0) parts.push(`${s.removed} removed`);
+  if (s.attributeChanges > 0) parts.push(`${s.attributeChanges} attribute change${s.attributeChanges === 1 ? '' : 's'}`);
+  return `> 🧱 **DOM changed** — ${parts.join(', ') || 'structural difference'}.\n\n`;
+}
+
+/**
  * Build markdown PR comment from results
  */
 export function buildComment(results: ResultsData): string {
@@ -29,16 +60,17 @@ ${summaryLine}
 
 `;
 
-  // Show changed snapshots with approve command
+  // Show changed snapshots with approve command + DOM noise hint
   const changedSnapshots = snapshots.filter(s => s.status === 'changed');
   if (changedSnapshots.length > 0) {
     comment += '#### Changed Snapshots\n\n';
     for (const snapshot of changedSnapshots) {
-      const diffPercent = snapshot.diffPercentage?.toFixed(2) || '0.00';
+      const diffPercent = formatDiffPercent(snapshot);
+      const domHint = renderDomHintMarkdown(snapshot);
       comment += `<details>
 <summary><code>${snapshot.name}</code> — ${diffPercent}% different</summary>
 
-\`\`\`bash
+${domHint}\`\`\`bash
 npx testivai approve "${snapshot.name}"
 # Or approve all changed snapshots:
 npx testivai approve --all
