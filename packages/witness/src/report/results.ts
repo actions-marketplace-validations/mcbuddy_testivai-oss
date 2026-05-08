@@ -6,6 +6,19 @@
 
 export type SnapshotStatus = 'passed' | 'changed' | 'new';
 
+export interface SnapshotDomSignal {
+  /** True if the DOM differs structurally between baseline and candidate. */
+  changed: boolean;
+  /** Per-bucket counts; null when changed is false. */
+  summary: { added: number; removed: number; attributeChanges: number } | null;
+  /**
+   * Noise hint: pixel diff is non-zero but DOM is structurally unchanged.
+   * Suggests render noise (anti-aliasing, font hinting, sub-pixel layout)
+   * rather than a real visual regression.
+   */
+  noiseHint: boolean;
+}
+
 export interface SnapshotResult {
   name: string;
   status: SnapshotStatus;
@@ -21,6 +34,11 @@ export interface SnapshotResult {
   currentPath?: string;
   /** Relative path to diff image (if any) */
   diffPath?: string;
+  /**
+   * DOM-level signal. Present only when both baseline and candidate
+   * captured DOM HTML alongside the screenshot.
+   */
+  dom?: SnapshotDomSignal;
 }
 
 export interface ReportSummary {

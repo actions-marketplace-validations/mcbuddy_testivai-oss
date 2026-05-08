@@ -18,7 +18,7 @@ import * as os from 'os';
 import * as path from 'path';
 import * as assert from 'assert';
 
-import { BaselineStore, generateReport, diff } from '@testivai/witness';
+import { BaselineStore, generateReport, diff, domDiff } from '@testivai/witness';
 
 function makeRgbaPng(width: number, height: number, fill: [number, number, number, number]): Buffer {
   // Create a "fake" PNG buffer that's actually raw RGBA. The OSS report
@@ -56,25 +56,47 @@ async function main(): Promise<void> {
     store.write('snapshot-passed', greenBaseline);
     store.writeTemp('snapshot-passed', greenBaseline);
 
-    // Changed snapshot
+    // Changed snapshot, no DOM data on either side → no DOM signal
     const redBaseline = makeRgbaPng(8, 8, [255, 0, 0, 255]);
     const blueCurrent = makeRgbaPng(8, 8, [0, 0, 255, 255]);
     store.write('snapshot-changed', redBaseline);
     store.writeTemp('snapshot-changed', blueCurrent);
+
+    // Changed pixels but DOM is identical → noise hint should fire
+    const yellowBaseline = makeRgbaPng(8, 8, [255, 255, 0, 255]);
+    const yellowishCurrent = makeRgbaPng(8, 8, [254, 255, 0, 255]);
+    const stableHtml = '<html><body><h1 class="hero">Hello</h1></body></html>';
+    store.write('snapshot-noise', yellowBaseline, undefined, stableHtml);
+    store.writeTemp('snapshot-noise', yellowishCurrent, stableHtml);
+
+    // Changed pixels AND DOM differs → DOM-changed hint with summary
+    const purpleBaseline = makeRgbaPng(8, 8, [128, 0, 128, 255]);
+    const purpleCurrent = makeRgbaPng(8, 8, [200, 0, 200, 255]);
+    const beforeHtml = '<html><body><h1>One</h1></body></html>';
+    const afterHtml = '<html><body><h1>One</h1><h1>Two</h1></body></html>';
+    store.write('snapshot-dom-change', purpleBaseline, undefined, beforeHtml);
+    store.writeTemp('snapshot-dom-change', purpleCurrent, afterHtml);
 
     // New snapshot (no baseline)
     store.writeTemp('snapshot-new', makeRgbaPng(8, 8, [128, 128, 128, 255]));
 
     assert.deepStrictEqual(
       store.list().sort(),
-      ['snapshot-changed', 'snapshot-passed'],
+      ['snapshot-changed', 'snapshot-dom-change', 'snapshot-noise', 'snapshot-passed'],
       'baseline list should match seeded baselines',
     );
     assert.deepStrictEqual(
       store.listTemp().sort(),
-      ['snapshot-changed', 'snapshot-new', 'snapshot-passed'],
+      ['snapshot-changed', 'snapshot-dom-change', 'snapshot-new', 'snapshot-noise', 'snapshot-passed'],
       'temp list should match seeded temps',
     );
+
+    // Quick sanity check on the DOM diff helper itself
+    const noChange = domDiff(stableHtml, stableHtml);
+    assert.strictEqual(noChange.domChanged, false, 'identical DOM should report no change');
+    const realChange = domDiff(beforeHtml, afterHtml);
+    assert.strictEqual(realChange.domChanged, true, 'differing DOM should report change');
+    assert.strictEqual(realChange.summary?.added, 1, 'one h1 added');
 
     // 3. Generate the local HTML report
     const reportData = generateReport({
@@ -84,9 +106,9 @@ async function main(): Promise<void> {
       autoOpen: false,
     });
 
-    assert.strictEqual(reportData.summary.total, 3, 'should report 3 snapshots');
+    assert.strictEqual(reportData.summary.total, 5, 'should report 5 snapshots');
     assert.strictEqual(reportData.summary.passed, 1, 'should report 1 passed');
-    assert.strictEqual(reportData.summary.changed, 1, 'should report 1 changed');
+    assert.strictEqual(reportData.summary.changed, 3, 'should report 3 changed');
     assert.strictEqual(reportData.summary.newSnapshots, 1, 'should report 1 new');
 
     const reportDir = path.join(projectRoot, 'visual-report');
@@ -95,9 +117,27 @@ async function main(): Promise<void> {
 
     const html = fs.readFileSync(path.join(reportDir, 'index.html'), 'utf-8');
     assert.ok(html.length > 100, 'index.html should be non-trivial');
+    assert.ok(html.includes('DOM unchanged'), 'noise hint badge should appear in HTML report');
+    assert.ok(html.includes('DOM changed'), 'dom-changed badge should appear in HTML report');
 
     const resultsJson = JSON.parse(fs.readFileSync(path.join(reportDir, 'results.json'), 'utf-8'));
-    assert.strictEqual(resultsJson.snapshots.length, 3);
+    assert.strictEqual(resultsJson.snapshots.length, 5);
+
+    const byName = Object.fromEntries(resultsJson.snapshots.map((s: any) => [s.name, s]));
+
+    // snapshot-changed has no DOM data on either side → no DOM block
+    assert.strictEqual(byName['snapshot-changed'].dom, undefined, 'snapshot without DOM data should have no dom field');
+
+    // snapshot-noise: pixels differ, DOM same → noiseHint true
+    assert.ok(byName['snapshot-noise'].dom, 'snapshot-noise should have a dom signal');
+    assert.strictEqual(byName['snapshot-noise'].dom.changed, false);
+    assert.strictEqual(byName['snapshot-noise'].dom.noiseHint, true);
+
+    // snapshot-dom-change: pixels differ, DOM differs → noiseHint false, summary populated
+    assert.ok(byName['snapshot-dom-change'].dom, 'snapshot-dom-change should have a dom signal');
+    assert.strictEqual(byName['snapshot-dom-change'].dom.changed, true);
+    assert.strictEqual(byName['snapshot-dom-change'].dom.noiseHint, false);
+    assert.strictEqual(byName['snapshot-dom-change'].dom.summary.added, 1);
 
     // 4. Verify @testivai/witness-playwright entry points load (no browser)
     //    We dynamically require to avoid TS path lookup issues if not built yet.

@@ -12,4 +12,5 @@ export type {
   ReportSummary,
   SnapshotResult,
   SnapshotStatus,
+  SnapshotDomSignal,
 } from './results';

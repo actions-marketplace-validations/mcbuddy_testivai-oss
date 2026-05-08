@@ -13,6 +13,7 @@ export { applyIgnoreRegions } from './ignore';
 export { applyMinimap } from './minimap';
 export { normalizeDimensions } from './resize';
 export { detectRegions } from './regions';
+export { domDiff } from './dom-diff';
 export type {
   DiffOptions,
   DiffResult,
@@ -21,3 +22,4 @@ export type {
   SizeMismatch,
   PbdRawResult,
 } from './types';
+export type { DomDiffResult, DomDiffSummary } from './dom-diff';

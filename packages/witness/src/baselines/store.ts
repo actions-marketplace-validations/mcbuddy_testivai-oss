@@ -5,8 +5,11 @@
  *
  * Directory structure:
  *   .testivai/
- *   ├── baselines/{name}/screenshot.png, metadata.json, .previous/
- *   └── temp/{name}/screenshot.png  (gitignored)
+ *   ├── baselines/{name}/screenshot.png, metadata.json, dom.html?, .previous/
+ *   └── temp/{name}/screenshot.png, dom.html?   (gitignored)
+ *
+ * `dom.html` is optional — written when the adapter captures DOM alongside
+ * the screenshot. Used by the DOM-diff noise hint in the local report.
  */
 
 import * as fs from 'fs';
@@ -66,13 +69,21 @@ export class BaselineStore {
   /**
    * Write a screenshot and metadata to the baseline directory.
    * Creates the directory if it doesn't exist.
+   *
+   * @param dom - Optional DOM HTML captured at the same time as the
+   *   screenshot. Stored as `dom.html` for the noise-hint compare.
    */
-  write(name: string, screenshot: Buffer, metadata?: Partial<BaselineMetadata>): void {
+  write(name: string, screenshot: Buffer, metadata?: Partial<BaselineMetadata>, dom?: string): void {
     const baselineDir = this.getBaselineDir(name);
     fs.mkdirSync(baselineDir, { recursive: true });
 
     // Write screenshot
     fs.writeFileSync(this.getBaselineScreenshotPath(name), screenshot);
+
+    // Write DOM if provided
+    if (dom !== undefined) {
+      fs.writeFileSync(this.getBaselineDomPath(name), dom);
+    }
 
     // Write metadata
     const now = new Date().toISOString();
@@ -83,6 +94,16 @@ export class BaselineStore {
       ...metadata,
     };
     fs.writeFileSync(this.getBaselineMetadataPath(name), JSON.stringify(meta, null, 2));
+  }
+
+  /**
+   * Read the baseline DOM HTML if one was captured.
+   * Returns null when no DOM file exists for this snapshot.
+   */
+  readDom(name: string): string | null {
+    const domPath = this.getBaselineDomPath(name);
+    if (!fs.existsSync(domPath)) return null;
+    return fs.readFileSync(domPath, 'utf-8');
   }
 
   /**
@@ -101,6 +122,8 @@ export class BaselineStore {
     const previousDir = path.join(baselineDir, '.previous');
     const currentScreenshot = this.getBaselineScreenshotPath(name);
     const currentMetadata = this.getBaselineMetadataPath(name);
+    const currentDom = this.getBaselineDomPath(name);
+    const tempDom = this.getTempDomPath(name);
 
     // Backup current baseline if it exists
     if (fs.existsSync(currentScreenshot)) {
@@ -109,11 +132,21 @@ export class BaselineStore {
       if (fs.existsSync(currentMetadata)) {
         fs.copyFileSync(currentMetadata, path.join(previousDir, 'metadata.json'));
       }
+      if (fs.existsSync(currentDom)) {
+        fs.copyFileSync(currentDom, path.join(previousDir, 'dom.html'));
+      }
     }
 
     // Copy temp to baseline
     fs.mkdirSync(baselineDir, { recursive: true });
     fs.copyFileSync(tempScreenshot, currentScreenshot);
+    if (fs.existsSync(tempDom)) {
+      fs.copyFileSync(tempDom, currentDom);
+    } else if (fs.existsSync(currentDom)) {
+      // Temp had no DOM but baseline did — drop the stale DOM rather
+      // than keep an inconsistent pair.
+      fs.rmSync(currentDom);
+    }
 
     // Update metadata
     const now = new Date().toISOString();
@@ -142,8 +175,10 @@ export class BaselineStore {
 
     const previousScreenshot = path.join(previousDir, 'screenshot.png');
     const previousMetadata = path.join(previousDir, 'metadata.json');
+    const previousDom = path.join(previousDir, 'dom.html');
     const currentScreenshot = this.getBaselineScreenshotPath(name);
     const currentMetadata = this.getBaselineMetadataPath(name);
+    const currentDom = this.getBaselineDomPath(name);
 
     // Restore previous screenshot
     if (fs.existsSync(previousScreenshot)) {
@@ -153,6 +188,13 @@ export class BaselineStore {
     // Restore previous metadata
     if (fs.existsSync(previousMetadata)) {
       fs.copyFileSync(previousMetadata, currentMetadata);
+    }
+
+    // Restore previous DOM (or remove the current one if no previous existed)
+    if (fs.existsSync(previousDom)) {
+      fs.copyFileSync(previousDom, currentDom);
+    } else if (fs.existsSync(currentDom)) {
+      fs.rmSync(currentDom);
     }
 
     // Remove .previous directory
@@ -174,11 +216,17 @@ export class BaselineStore {
 
   /**
    * Write a temp screenshot (captured during a test run).
+   *
+   * @param dom - Optional DOM HTML captured at the same time as the
+   *   screenshot. Stored as `dom.html` next to the screenshot.
    */
-  writeTemp(name: string, screenshot: Buffer): void {
+  writeTemp(name: string, screenshot: Buffer, dom?: string): void {
     const tempDir = path.join(this.tempDir, name);
     fs.mkdirSync(tempDir, { recursive: true });
     fs.writeFileSync(this.getTempScreenshotPath(name), screenshot);
+    if (dom !== undefined) {
+      fs.writeFileSync(this.getTempDomPath(name), dom);
+    }
   }
 
   /**
@@ -190,6 +238,16 @@ export class BaselineStore {
       return null;
     }
     return fs.readFileSync(tempPath);
+  }
+
+  /**
+   * Read the temp DOM HTML if one was captured.
+   * Returns null when no temp DOM file exists for this snapshot.
+   */
+  readTempDom(name: string): string | null {
+    const domPath = this.getTempDomPath(name);
+    if (!fs.existsSync(domPath)) return null;
+    return fs.readFileSync(domPath, 'utf-8');
   }
 
   /**
@@ -228,8 +286,16 @@ export class BaselineStore {
     return path.join(this.baselinesDir, name, 'metadata.json');
   }
 
+  getBaselineDomPath(name: string): string {
+    return path.join(this.baselinesDir, name, 'dom.html');
+  }
+
   getTempScreenshotPath(name: string): string {
     return path.join(this.tempDir, name, 'screenshot.png');
+  }
+
+  getTempDomPath(name: string): string {
+    return path.join(this.tempDir, name, 'dom.html');
   }
 
   getBaselinesDir(): string {
