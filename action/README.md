@@ -22,7 +22,7 @@ jobs:
       - run: npx playwright test
 
       # Post results to PR (always runs so a failed test still gets a report)
-      - uses: mcbuddy/testivai-oss/action@v1
+      - uses: mcbuddy/testivai-oss@v1
         if: always()
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -74,6 +74,17 @@ npx testivai approve "checkout-page"
 npx testivai approve "nav-redesign"
 </details>
 ```
+
+## Repository layout
+
+Why `action.yml` is at the repo root and the rest is under `action/`:
+
+| Path | What |
+|---|---|
+| `action.yml` (repo root) | Required by GitHub Marketplace — only root-level metadata files are auto-listed. |
+| `action/src/`, `action/dist/`, `action/package.json`, `action/README.md`, `action/jest.config.js` | Source, build output, package config, and docs. Kept in a subdir so the workspace root stays SDK-focused. |
+
+`action.yml`'s `runs.main:` resolves to `action/dist/index.js`. Consumers `uses: mcbuddy/testivai-oss@v1` (no path).
 
 ## Contributing
 

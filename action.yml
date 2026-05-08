@@ -30,4 +30,10 @@ inputs:
 
 runs:
   using: 'node20'
-  main: 'dist/index.js'
+  # action.yml lives at the repo root because GitHub Marketplace only
+  # auto-lists actions whose metadata file is at root:
+  # https://docs.github.com/en/actions/sharing-automations/creating-actions/publishing-actions-in-github-marketplace
+  # The bundled JS still lives under action/dist/ so build artifacts
+  # don't pollute the workspace root. `main` is resolved relative to
+  # this file.
+  main: 'action/dist/index.js'
