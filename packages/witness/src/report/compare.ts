@@ -7,8 +7,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { diff as diffEngine } from '../diff';
+import { domDiff } from '../diff/dom-diff';
 import { BaselineStore } from '../baselines/store';
-import { SnapshotResult, SnapshotStatus } from './results';
+import { SnapshotDomSignal, SnapshotResult, SnapshotStatus } from './results';
 
 export interface CompareOptions {
   threshold?: number;
@@ -72,10 +73,43 @@ export function compareAll(options: CompareOptions): SnapshotResult[] {
       threshold,
     );
 
+    // DOM-level noise hint. Only meaningful when both sides captured DOM.
+    // For 'passed' (pixel-identical) we skip the work — it's already the
+    // strongest possible signal.
+    if (result.status === 'changed') {
+      const baselineDom = store.readDom(name);
+      const candidateDom = store.readTempDom(name);
+      const domSignal = computeDomSignal(baselineDom, candidateDom);
+      if (domSignal) {
+        result.dom = domSignal;
+      }
+    }
+
     results.push(result);
   }
 
   return results;
+}
+
+/**
+ * Run DOM diff and turn it into a report-shaped signal.
+ *
+ * Returns null when DOM data isn't available on either side — we don't
+ * want to confuse the user with "DOM unchanged" hints when the adapter
+ * never captured DOM in the first place.
+ */
+function computeDomSignal(
+  baselineDom: string | null,
+  candidateDom: string | null,
+): SnapshotDomSignal | null {
+  if (!baselineDom || !candidateDom) return null;
+  const result = domDiff(baselineDom, candidateDom);
+  return {
+    changed: result.domChanged,
+    summary: result.summary,
+    // The whole point: pixels differ, DOM does not → likely render noise.
+    noiseHint: !result.domChanged,
+  };
 }
 
 /**

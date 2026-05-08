@@ -76,6 +76,13 @@ export function renderHtml(data: ReportData): string {
     .badge-passed { background: #3fb95022; color: #3fb950; }
     .snapshot-stats { font-size: 12px; color: #8b949e; margin-bottom: 16px; }
 
+    /* DOM noise hint */
+    .dom-hint { display: flex; align-items: center; gap: 8px; margin-top: 8px; padding: 10px 12px; border-radius: 8px; font-size: 12px; line-height: 1.5; }
+    .dom-hint.noise { background: #1f6feb1a; border: 1px solid #1f6feb44; color: #79c0ff; }
+    .dom-hint.changed { background: #6e768166; border: 1px solid #8b949e44; color: #c9d1d9; }
+    .dom-hint .label { font-weight: 600; }
+    .dom-hint .summary { color: inherit; opacity: 0.85; }
+
     /* 3-column diff view */
     .diff-view { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
     .diff-view.two-col { grid-template-columns: 1fr 1fr; }
@@ -209,6 +216,7 @@ function renderSnapshot(snapshot: SnapshotResult): string {
         <span class="snapshot-badge ${badgeClass}">${snapshot.status}</span>
       </div>
       ${snapshot.status === 'changed' ? `<div class="snapshot-stats">Diff: ${snapshot.diffPercent.toFixed(2)}% (${snapshot.diffCount} pixels)</div>` : ''}
+      ${renderDomHint(snapshot)}
       <div class="${gridClass}">
         ${hasBaseline ? `<div class="diff-col"><label>Baseline</label><img src="${snapshot.baselinePath}" alt="Baseline"></div>` : ''}
         ${hasDiff ? `<div class="diff-col"><label>Diff</label><img src="${snapshot.diffPath}" alt="Diff"></div>` : ''}
@@ -219,6 +227,42 @@ function renderSnapshot(snapshot: SnapshotResult): string {
         <code>npx testivai approve ${escapeHtml(snapshot.name)}</code>
         <button class="copy-btn" data-cmd="npx testivai approve ${escapeHtml(snapshot.name)}">Copy</button>
       </div>` : ''}
+    </div>`;
+}
+
+/**
+ * Render the DOM noise-hint badge for a snapshot.
+ *
+ * Two states (DOM hint is only meaningful for `changed` snapshots that
+ * have DOM data captured on both sides):
+ *   - noiseHint: pixels differ but DOM is unchanged → "likely render noise"
+ *   - changed:   pixels and DOM both differ → show counts so the reviewer
+ *                can decide whether the change is intentional
+ *
+ * Returns empty string when no DOM data was captured (the adapter didn't
+ * record `dom.html`); we don't want to confuse the user with "no signal".
+ */
+function renderDomHint(snapshot: SnapshotResult): string {
+  if (!snapshot.dom) return '';
+
+  if (snapshot.dom.noiseHint) {
+    return `
+      <div class="dom-hint noise" title="DOM tree is identical between baseline and candidate; the pixel diff is likely render noise.">
+        <span class="label">DOM unchanged</span>
+        <span class="summary">— pixel diff is likely render noise (anti-aliasing, font hinting).</span>
+      </div>`;
+  }
+
+  const s = snapshot.dom.summary;
+  if (!s) return '';
+  const parts: string[] = [];
+  if (s.added > 0) parts.push(`${s.added} added`);
+  if (s.removed > 0) parts.push(`${s.removed} removed`);
+  if (s.attributeChanges > 0) parts.push(`${s.attributeChanges} attribute change${s.attributeChanges === 1 ? '' : 's'}`);
+  return `
+    <div class="dom-hint changed" title="Structural DOM changes detected alongside the pixel diff.">
+      <span class="label">DOM changed</span>
+      <span class="summary">— ${escapeHtml(parts.join(', ') || 'structural difference')}.</span>
     </div>`;
 }
 

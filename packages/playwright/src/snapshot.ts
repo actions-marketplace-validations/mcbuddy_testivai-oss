@@ -320,10 +320,33 @@ export async function snapshot(
   // 1.5. Local mode: also place the screenshot in the layout expected by
   //      @testivai/witness/report (subdirectory keyed by snapshot name).
   //      This is what `BaselineStore.listTemp()` and `compareAll()` enumerate.
+  //
+  //      DOM HTML is captured here too — written as `dom.html` next to the
+  //      screenshot. compareAll() uses this to produce the noise-hint signal
+  //      ("pixels differ but DOM is unchanged → likely render noise"). DOM
+  //      capture is wrapped in try/catch so a flaky page never breaks the
+  //      screenshot path; missing dom.html simply suppresses the hint.
   if (isLocalMode) {
     const localSnapshotDir = path.join(outputDir, snapshotName);
     await fs.ensureDir(localSnapshotDir);
     await fs.copyFile(screenshotPath, path.join(localSnapshotDir, 'screenshot.png'));
+
+    try {
+      const domHtml = await page.evaluate(
+        () => document.documentElement.outerHTML
+      );
+      if (typeof domHtml === 'string' && domHtml.length > 0) {
+        await fs.writeFile(
+          path.join(localSnapshotDir, 'dom.html'),
+          domHtml,
+          'utf-8'
+        );
+      }
+    } catch (err: unknown) {
+      if (process.env.TESTIVAI_DEBUG === 'true') {
+        console.warn('[TestivAI] DOM capture failed (noise-hint will be unavailable):', err);
+      }
+    }
   }
 
   // 2. Dump page structure (HTML) - skip in local mode
