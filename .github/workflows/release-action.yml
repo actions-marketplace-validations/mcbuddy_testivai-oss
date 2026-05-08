@@ -1,0 +1,84 @@
+name: Release Action (major-tag rolling)
+
+# When a `v*` tag is pushed (e.g. v1.0.0, v1.2.3), update the rolling
+# major-version tag (e.g. v1) to point at the same SHA. This is the
+# convention every published GitHub Action follows so users can pin to
+# `uses: mcbuddy/testivai-oss/action@v1` and get bug fixes without
+# repinning, while still being able to opt into a specific point release.
+#
+# Triggers ONLY for full semver tags (vMAJOR.MINOR.PATCH). Pre-release
+# tags like v1.0.0-rc.1 are skipped — pre-releases shouldn't move the
+# stable major pointer.
+#
+# Manual override: workflow_dispatch with a tag input lets a maintainer
+# rebuild the major pointer for any existing tag without re-tagging.
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing semver tag to point the major pointer at (e.g. v1.2.3)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  roll-major-tag:
+    name: Roll major-version tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Resolve source tag and target major
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            SRC_TAG="${{ inputs.tag }}"
+          else
+            SRC_TAG="${GITHUB_REF#refs/tags/}"
+          fi
+
+          # Strict semver match; refuse to roll on weird tags
+          if ! [[ "$SRC_TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::Tag '$SRC_TAG' is not a clean semver tag (vMAJOR.MINOR.PATCH). Refusing to roll."
+            exit 1
+          fi
+
+          MAJOR_TAG="v${BASH_REMATCH[1]}"
+          echo "src_tag=$SRC_TAG" >> "$GITHUB_OUTPUT"
+          echo "major_tag=$MAJOR_TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved: source=$SRC_TAG, will roll major=$MAJOR_TAG"
+
+      - name: Verify action/dist/ is committed at this tag
+        run: |
+          if [ ! -f action/dist/index.js ]; then
+            echo "::error::action/dist/index.js is missing at tag ${{ steps.resolve.outputs.src_tag }}. The action will not run."
+            exit 1
+          fi
+          echo "OK: action/dist/index.js is present"
+
+      - name: Force-update major tag to source tag
+        env:
+          SRC_TAG: ${{ steps.resolve.outputs.src_tag }}
+          MAJOR_TAG: ${{ steps.resolve.outputs.major_tag }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          # Resolve the source tag to a SHA, then force-update the major
+          # tag to point at that SHA. Annotated tag for nicer `git show`.
+          SRC_SHA=$(git rev-list -n 1 "$SRC_TAG")
+          git tag -f -a "$MAJOR_TAG" -m "Rolling major tag → $SRC_TAG ($SRC_SHA)" "$SRC_SHA"
+          git push -f origin "refs/tags/$MAJOR_TAG"
+          echo "Pointed $MAJOR_TAG at $SRC_TAG ($SRC_SHA)"
