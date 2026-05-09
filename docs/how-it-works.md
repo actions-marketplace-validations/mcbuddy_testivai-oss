@@ -130,7 +130,7 @@ Later runs        →  status: passed    →  no action
                                          either approve (replace baseline) or fix code
 ```
 
-See [Concepts: Baselines](./concepts/baselines.md) for the full approval flow.
+Run `npx testivai approve <name>` (or `--all`) to promote a temp capture to the new baseline. The previous baseline is backed up under `.testivai/baselines/<name>/.previous/`; `--undo` restores it.
 
 ---
 
@@ -144,4 +144,4 @@ If `TESTIVAI_API_KEY` is set (and `.testivai/config.json` is **not** in local mo
 
 Cloud mode is **opt-in**. The OSS SDKs work entirely without it.
 
-→ Continue to **[Frameworks](./frameworks/overview.md)**
+→ Continue to **[Playwright adapter](./frameworks/playwright.md)** or **[WebdriverIO adapter](./frameworks/webdriverio.md)**, or read the **[OSS vs Cloud](./oss-vs-cloud.md)** capability matrix.

@@ -1,36 +1,44 @@
 # TestivAI OSS Documentation
 
-Welcome to the open-source documentation for the TestivAI SDKs.
+The public, open-source documentation for `@testivai/witness` and the framework adapters. Everything here applies to the **local-first OSS lane**: no account, no API key, no upload — capture, diff, report, approve, all on disk.
 
-This documentation covers the **local-first, free, open-source** workflow:
-- Capture screenshots locally with `@testivai/witness` (CLI + library)
-- Compare against locally stored baselines under `.testivai/baselines/`
-- Generate a self-contained HTML report under `./visual-report/`
-- Optionally upgrade to the [TestivAI cloud service](https://testiv.ai) for AI-powered analysis and a hosted dashboard
+For cloud-only features (REVEAL AI counselor, dashboard, history, team approval, smart baselines, the other 11 frameworks), see [testiv.ai/docs](https://testiv.ai/docs).
 
-## Quick Links
+## Start here
 
-- **[Getting Started](./intro.md)** — install + first capture
+- **[Getting Started](./intro.md)** — install + first capture, 5 minutes
 - **[How It Works](./how-it-works.md)** — high-level architecture
-- **[Frameworks](./frameworks/overview.md)** — Playwright, Cypress, Selenium, WebdriverIO, etc.
-- **[CLI Reference](./cli/init.md)** — `init`, `run`, `capture`, `auth`
-- **[Concepts](./concepts/baselines.md)** — baselines, statuses, REVEAL Engine, performance metrics
-- **[Guides](./guides/ci-cd.md)** — CI/CD, GitHub integration, troubleshooting
+- **[OSS vs Cloud](./oss-vs-cloud.md)** — capability matrix, where the boundary is drawn
 
-## Local-First vs Cloud Mode
+## Frameworks (OSS adapters)
 
-| Capability | Local Mode (OSS) | Cloud Mode (optional) |
-|---|---|---|
-| Capture screenshots & structure | ✅ | ✅ |
-| Local pixel diff & ignore regions | ✅ | ✅ |
-| Local HTML report | ✅ | ✅ |
-| Baseline approval CLI | ✅ | ✅ |
-| AI-powered analysis (Gemini) | — | ✅ |
-| Hosted dashboard & team workflow | — | ✅ |
-| Smart Baseline approval flow | — | ✅ |
+Pick the framework you use:
 
-Sections that mention `TESTIVAI_API_KEY`, the dashboard, or the REVEAL Engine cloud pipeline apply to **Cloud Mode** and are optional. The local OSS workflow does not require an account.
+- **[Playwright](./frameworks/playwright.md)** — `@testivai/witness-playwright`
+- **[WebdriverIO](./frameworks/webdriverio.md)** — `@testivai/witness-webdriverio` (local mode)
+- **[Cloud-only frameworks](./frameworks/cloud-only-frameworks.md)** — Cypress, Puppeteer, Selenium, Robot, RSpec, Cucumber
 
-## Source of Truth
+## CLI Reference
 
-The canonical OSS docs live in this repo at [`/docs`](https://github.com/mcbuddy/testivai-oss/tree/main/docs). Issues and contributions are welcome via [GitHub Issues](https://github.com/mcbuddy/testivai-oss/issues).
+- **[`testivai init`](./cli/init.md)** — set up local mode in your project
+- **[`testivai run`](./cli/run.md)** — experimental sidecar for non-adapter frameworks (see also [sidecar caveats](./sidecar-testivai-run.md))
+- **[`testivai capture`](./cli/capture.md)** — manual single-snapshot capture
+- **[`testivai auth`](./cli/auth.md)** — authenticate against the cloud service (cloud lane only)
+
+## Reference
+
+- **[`results.json` schema + on-disk layout (Extension API)](./extension-api.md)** — the contract for community adapters and third-party reporters
+- **[GitHub Action](./github-action.md)** — `mcbuddy/testivai-oss@v1` for PR comments + commit status
+- **[`testivai run` experimental sidecar](./sidecar-testivai-run.md)** — what it is, why it's labeled experimental, when to use it anyway
+
+## Guides
+
+- **[CI/CD](./guides/ci-cd.md)**
+- **[GitHub Integration](./guides/github-integration.md)**
+- **[Headless](./guides/headless.md)**
+- **[Docker](./guides/docker.md)**
+- **[Troubleshooting](./guides/troubleshooting.md)**
+
+## Source of truth
+
+The canonical OSS docs live in this repo at [`/docs`](https://github.com/mcbuddy/testivai-oss/tree/main/docs). They sync to the public docs site automatically on each release. To propose a change, open a PR here. Issues: [GitHub Issues](https://github.com/mcbuddy/testivai-oss/issues).
