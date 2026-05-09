@@ -1,0 +1,76 @@
+{
+  "name": "@testivai/witness-webdriverio",
+  "version": "0.1.0",
+  "description": "WebdriverIO adapter for TestivAI Witness — local-first visual regression with pixel + DOM comparison",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./service": {
+      "types": "./dist/service.d.ts",
+      "default": "./dist/service.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "test:unit": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "webdriverio",
+    "wdio",
+    "wdio-service",
+    "visual-regression",
+    "testing",
+    "testivai"
+  ],
+  "author": "TestivAI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcbuddy/testivai-oss.git",
+    "directory": "packages/webdriverio"
+  },
+  "bugs": {
+    "url": "https://github.com/mcbuddy/testivai-oss/issues"
+  },
+  "homepage": "https://github.com/mcbuddy/testivai-oss/tree/main/packages/webdriverio#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "webdriverio": ">=8.0.0"
+  },
+  "peerDependenciesMeta": {
+    "webdriverio": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@testivai/witness": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^29.0.0",
+    "ts-jest": "^29.2.5",
+    "typescript": "^5.0.0",
+    "webdriverio": "^9.0.0"
+  }
+}

@@ -1,177 +1,166 @@
 ---
-sidebar_position: 4
+sidebar_position: 2
 title: WebdriverIO
 ---
 
 # WebdriverIO
 
-Add visual regression testing to your existing WebdriverIO suite. The `browser.witness()` command is added as a custom WDIO command — no changes to your existing tests structure required.
+The `@testivai/witness-webdriverio` adapter is a [WDIO service](https://webdriver.io/docs/customservices/) plus an explicit `testivai.witness(browser, name)` capture call. Same `.testivai/baselines/` layout as the Playwright adapter, same HTML report, same approval workflow.
+
+This page covers **local mode** — no account, no API key, fully standalone. Cloud upload from WDIO is not yet supported (use the Playwright adapter for that path today).
 
 ---
 
 ## Prerequisites
 
-- Node.js 18+
-- Chrome browser
-- Existing WebdriverIO project (`npm install @wdio/cli`)
+- Node.js 18 or higher
+- WebdriverIO 8 or 9
+- A working WDIO config (`wdio.conf.ts` or `wdio.conf.js`)
 
 ---
 
-## 1. Install the CLI
+## 1. Install
 
 ```bash
-npm install -g @testivai/witness
+npm install -D @testivai/witness @testivai/witness-webdriverio
 ```
+
+`webdriverio` is a peer dependency — you should already have it from your existing setup.
 
 ---
 
-## 2. Run the Setup Wizard
+## 2. Configure local mode
 
-```bash
-npx testivai init
+Create `.testivai/config.json` at your project root:
+
+```json
+{
+  "mode": "local",
+  "threshold": 0.1,
+  "reportDir": "visual-report",
+  "autoOpen": false
+}
 ```
 
-Select when prompted:
-
-```
-? Select your language:        › JavaScript / TypeScript
-? Select your test framework:  › WebdriverIO
-? Where are your test files?   › test/specs
-```
-
-The wizard generates two files:
-
-| File | Purpose |
-|---|---|
-| `testivai-witness.js` | Registers `browser.witness()` custom command |
-| `test/specs/visual-example.js` | Working example test |
+This file is the local-mode marker. Without it, the adapter logs a warning and skips report generation — pixels are still captured, but no report is built.
 
 ---
 
-## 3. Authenticate
+## 3. Register the WDIO service
 
-```bash
-npx testivai auth <your-api-key>
-```
+In your `wdio.conf.ts`:
 
-Get your API key from the [TestivAI Dashboard](https://dashboard.testiv.ai).
+```ts
+import { TestivaiService } from '@testivai/witness-webdriverio/service';
 
----
-
-## 4. Chrome Setup
-
-Add `--remote-debugging-port=9222` to your `wdio.conf.js` Chrome options:
-
-```js
-// wdio.conf.js
-exports.config = {
-  capabilities: [{
-    browserName: 'chrome',
-    'goog:chromeOptions': {
-      args: ['--remote-debugging-port=9222'],
-    },
-  }],
-};
-```
-
-Also require the witness helper in your `wdio.conf.js` so `browser.witness()` is available globally:
-
-```js
-// wdio.conf.js
-exports.config = {
-  before: function () {
-    require('./testivai-witness');
-  },
-  // ...
-};
-```
-
----
-
-## 5. Add Capture Calls
-
-`browser.witness('name')` is available in any spec file after requiring the helper:
-
-```js
-describe('Visual Regression', () => {
-  it('homepage looks correct', async () => {
-    await browser.url('/');
-    await browser.witness('homepage');
-  });
-
-  it('dashboard looks correct', async () => {
-    await browser.url('/dashboard');
-    await browser.witness('dashboard');
-  });
-});
-```
-
-**The generated helper file (`testivai-witness.js`):**
-
-```js
-// TestivAI Visual Regression Helper
-browser.addCommand('witness', function (name) {
-  return this.execute('return window.testivaiWitness(arguments[0])', name);
-});
-```
-
----
-
-## 6. Full Working Example
-
-The wizard generates this example at `test/specs/visual-example.js`:
-
-```js
-// TestivAI Visual Regression Example
-const { expect } = require('@wdio/globals');
-
-describe('Visual Regression', () => {
-  it('captures homepage', async () => {
-    await browser.url('/');
-    await browser.witness('homepage');
-  });
-});
-```
-
----
-
-## 7. Run
-
-```bash
-testivai run "npx wdio run wdio.conf.js"
-```
-
----
-
-## CI/CD
-
-Add headless Chrome args for CI:
-
-```js
-// wdio.conf.js
-'goog:chromeOptions': {
-  args: [
-    '--remote-debugging-port=9222',
-    '--headless',
-    '--no-sandbox',
-    '--disable-dev-shm-usage',
+export const config = {
+  // ... your existing config
+  services: [
+    [TestivaiService, { quiet: false }],
   ],
-},
+};
 ```
 
-GitHub Actions example:
+The service runs `onComplete` after the test suite finishes. It compares everything in `.testivai/temp/` against `.testivai/baselines/` and writes the report to `visual-report/`.
 
-```yaml
-- name: Run visual tests
-  run: testivai run "npx wdio run wdio.conf.js"
-  env:
-    TESTIVAI_API_KEY: ${{ secrets.TESTIVAI_API_KEY }}
+---
+
+## 4. Capture inside your tests
+
+```ts
+import { testivai } from '@testivai/witness-webdriverio';
+
+describe('Homepage', () => {
+  it('renders correctly', async () => {
+    await browser.url('http://localhost:3000');
+    await testivai.witness(browser, 'homepage');
+  });
+
+  it('product detail page', async () => {
+    await browser.url('http://localhost:3000/products/widget');
+    await testivai.witness(browser, 'product-widget');
+  });
+});
+```
+
+The capture function calls `browser.takeScreenshot()` (full-page screenshot via the WebDriver protocol) and `browser.execute(() => document.documentElement.outerHTML)` (page DOM for the noise-hint signal).
+
+---
+
+## 5. Run
+
+```bash
+npx wdio run wdio.conf.ts
+```
+
+- **First run**: baselines are written to `.testivai/baselines/<name>/`. Commit them: `git add .testivai/baselines`.
+- **Later runs**: screenshots are diffed and a self-contained HTML report is written to `./visual-report/`.
+
+---
+
+## Approving changes
+
+```bash
+# Open the report
+open visual-report/index.html
+
+# Approve a single snapshot
+npx testivai approve "homepage"
+
+# Approve everything that changed
+npx testivai approve --all
+
+# Undo the last approval
+npx testivai approve --undo "homepage"
+```
+
+Approved snapshots overwrite the baseline; the previous baseline is backed up to `.testivai/baselines/<name>/.previous/`.
+
+---
+
+## Pixel + DOM comparison
+
+Each snapshot stores both the screenshot and the page DOM. When the report compares them:
+
+- **Pixels match** → `passed`
+- **Pixels differ, DOM matches** → `changed` with a "DOM unchanged — likely render noise" hint
+- **Pixels differ, DOM differs** → `changed` with a count of added / removed / attribute changes
+
+The same hint appears in PR comments via the TestivAI GitHub Action.
+
+To skip DOM capture for a single snapshot (rare — useful only when DOM serialization is slow on a particular page):
+
+```ts
+await testivai.witness(browser, 'heavy-page', { skipDom: true });
 ```
 
 ---
 
-## How it works
+## Service options
 
-`browser.witness('name')` uses WebdriverIO's `execute()` to call `window.testivaiWitness(name)` — the global function injected by the Witness SDK. The SDK captures a full snapshot and uploads it for REVEAL Engine™ analysis.
+```ts
+[TestivaiService, {
+  projectRoot: process.cwd(),  // project root for .testivai/
+  reportDir: 'visual-report',  // override report output dir
+  threshold: 0.1,              // pixel diff threshold (0–1)
+  autoOpen: false,             // open report after generation
+  quiet: false,                // suppress logging
+}]
+```
 
-→ **[See how the sidecar model works](/how-it-works)**
+All options are optional; defaults come from `.testivai/config.json`.
+
+---
+
+## Cloud mode (not yet supported)
+
+The Playwright adapter has both local and cloud lanes. The WDIO adapter ships local-only in the first iteration. Cloud upload from WDIO will be added once the local path is broadly used.
+
+If you set `mode: "cloud"` in `.testivai/config.json` while using WDIO, the adapter logs a clear warning and exits without generating a report.
+
+---
+
+## See also
+
+- [`@testivai/witness-webdriverio` package README](https://github.com/mcbuddy/testivai-oss/tree/main/packages/webdriverio)
+- [Quickstart for the Playwright adapter](./playwright.md) (similar shape, different framework)
