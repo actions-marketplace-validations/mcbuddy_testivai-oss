@@ -1,0 +1,49 @@
+# Changelog — testivai-oss repo
+
+Human-readable history of repo-level changes (CI, release tooling, docs, governance). Per-package release notes live in each package's own `CHANGELOG.md` and on the npm package page.
+
+The repo follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conventions; package versions follow [SemVer](https://semver.org/spec/v2.0.0.html).
+
+## Unreleased
+
+### Added
+- `docs/oss-vs-cloud.md` — capability matrix; explicit boundary between the OSS lane (pixel + DOM) and the cloud lane (CSS + layout + AI counselor + dashboard + history).
+- `docs/github-action.md` — full reference for `mcbuddy/testivai-oss@v1`, including PR comment shape and DOM noise hint output.
+- `docs/extension-api.md` — stable contract for community adapters: on-disk `.testivai/` layout + `results.json` schema. Versioned, governed by SemVer.
+- `docs/sidecar-testivai-run.md` — explicit "experimental" labeling for the framework-agnostic CDP sidecar; documents launch-coordination + race-condition pitfalls and recommends per-framework adapters instead.
+- `docs/frameworks/cloud-only-frameworks.md` — single redirect for Cypress, Puppeteer, Selenium, Robot, RSpec, Cucumber. Points at iter-2 plans, the experimental sidecar, and the extension-API path for community adapters.
+- `CHANGELOG.md` (this file) — repo-level history.
+
+### Changed
+- `docs/README.md` — rewritten as a navigable index that lists what actually ships (Playwright + WDIO + GitHub Action), not the aspirational set.
+- `docs/intro.md` — Path A is now "dedicated adapters (Playwright + WebdriverIO)"; Path B is labeled experimental sidecar with cross-link to the new caveats doc.
+
+### Removed
+- `docs/concepts/reveal-engine.md` — REVEAL is a cloud feature; the page belongs on the cloud docs site, not in OSS.
+- `docs/concepts/baselines.md`, `docs/concepts/performance-metrics.md` — placeholder stubs ("Coming Soon"); content folded into `intro.md` and the framework adapter pages.
+- `docs/concepts/browser-integration.md` — described the sidecar architecture; superseded by `docs/sidecar-testivai-run.md`.
+- `docs/concepts/test-statuses.md` — described cloud statuses (PENDING, PROCESSING, AI_PROCESSING_ERROR); OSS uses the simpler `passed | changed | new` schema documented in `docs/extension-api.md`.
+- `docs/frameworks/overview.md` and 11 cloud-only framework pages (Cypress, Puppeteer, Selenium ×6, Robot, RSpec, Cucumber) — replaced by `docs/frameworks/cloud-only-frameworks.md` plus the OSS adapter pages for Playwright and WebdriverIO.
+
+## 2026-05-08
+
+### Added
+- New package: **`@testivai/witness-webdriverio@0.1.0`** — local-mode WDIO adapter (W5 of OSS plan v3). Service + `testivai.witness(browser, name)` capture. ~7 KB packed. Uses `browser.takeScreenshot()` + `browser.execute()`; no CDP, no port poll. Cloud mode pending.
+- GitHub Action shippable from this repo as `mcbuddy/testivai-oss@v1` (W4). `action.yml` at repo root for Marketplace eligibility; bundled `dist/` committed; CI guard verifies `dist/` matches src; release-action workflow rolls major-tag on every clean semver tag.
+- Action PR comment now surfaces the DOM noise hint (W3 follow-through).
+- `@testivai/witness` now ships pixel + DOM comparison (W3). Self-rolled tokenizer + multiset comparator, ~5 KB gzipped on the wire. Surfaces "DOM unchanged → likely render noise" hint in the local HTML report and in PR comments via the GitHub Action.
+
+### Changed
+- CI matrix expanded from `{ubuntu, Node 20}` to `{ubuntu, macos} × {Node 20, 22}` (W2). Windows deferred until OSS surface stabilizes.
+- npm publish now emits provenance attestations (W1).
+- `pnpm/action-setup` bumped from v2 to v4; pnpm version sourced from `packageManager` field in `package.json`.
+
+### Added
+- Repository hygiene (W1): `SECURITY.md`, `.github/PULL_REQUEST_TEMPLATE.md` (updated), `.github/CODEOWNERS` (set to `@mcbuddy`), `.github/dependabot.yml` (npm + github-actions, weekly, grouped), `.github/workflows/codeql.yml` (security-extended).
+
+### Fixed
+- `action.yml` moved to repo root (was under `action/`) so GitHub Marketplace auto-listing works. Action consumers now `uses: mcbuddy/testivai-oss@v1` (no path).
+
+## Earlier history
+
+For initial extraction history (Phase 1–10 of the SDK split out of `mcbuddy/testivai-monorepo`), see the [`CUTOVER.md`](./CUTOVER.md) runbook and the initial commits on `main`.

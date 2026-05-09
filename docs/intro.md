@@ -15,9 +15,13 @@ Add visual regression testing to your test suite in under 5 minutes — fully lo
 
 ---
 
-## Path A — Playwright (recommended)
+## Path A — Dedicated adapters (recommended)
 
-Playwright has a dedicated TestivAI SDK that integrates as a reporter. No CLI wrapper, no Chrome remote debugging port — just install and add a capture call.
+Two frameworks have first-class adapter packages today: **Playwright** and **WebdriverIO**. They use the framework's native screenshot APIs — no CLI wrapper, no Chrome remote debugging port, no race conditions.
+
+### Playwright
+
+The Playwright adapter integrates as a reporter. Just install and add a capture call.
 
 ### 1. Install
 
@@ -77,11 +81,46 @@ npx playwright test
 **First run:** baselines are created under `.testivai/baselines/<name>/screenshot.png` and the report shows `New: N`. Commit them to git.
 **Later runs:** screenshots are compared, the HTML report opens at `visual-report/index.html`, and `results.json` is produced.
 
+### WebdriverIO
+
+```bash
+npm install -D @testivai/witness @testivai/witness-webdriverio
+```
+
+Add the service to `wdio.conf.ts`:
+
+```ts
+import { TestivaiService } from '@testivai/witness-webdriverio/service';
+
+export const config = {
+  services: [[TestivaiService, {}]],
+};
+```
+
+Capture inside a test:
+
+```ts
+import { testivai } from '@testivai/witness-webdriverio';
+
+it('homepage looks correct', async () => {
+  await browser.url('http://localhost:3000');
+  await testivai.witness(browser, 'homepage');
+});
+```
+
+Same `.testivai/baselines/` layout, same HTML report, same approval workflow as the Playwright lane.
+
+→ See the full [WebdriverIO quickstart](./frameworks/webdriverio.md) for service options + cloud-mode caveat.
+
 ---
 
-## Path B — Other Frameworks (Cypress, Selenium, WebdriverIO, pytest, etc.)
+## Path B — Other Frameworks (experimental)
 
-For non-Playwright frameworks, use the framework-agnostic CLI from `@testivai/witness`. It wraps your test command and captures via Chrome's DevTools Protocol.
+For Cypress, Puppeteer, Selenium, pytest, RSpec, Robot, etc., use the framework-agnostic CLI from `@testivai/witness`. It wraps your test command and captures via Chrome's DevTools Protocol.
+
+:::warning Experimental
+This sidecar mode is labeled experimental — launch coordination across frameworks is brittle. For Playwright and WebdriverIO, prefer the dedicated adapters above. See [the sidecar caveats](./sidecar-testivai-run.md) for the full picture, and [community adapter contract](./extension-api.md) if you'd like to write a proper adapter for your framework.
+:::
 
 ### 1. Install the CLI
 
@@ -175,6 +214,8 @@ When `TESTIVAI_API_KEY` is set, runs upload evidence to the cloud instead of gen
 ## What's Next
 
 - **[How It Works](./how-it-works.md)** — local pipeline, capture layers, diff algorithm
-- **[Frameworks](./frameworks/overview.md)** — per-framework setup guides
-- **[Concepts: Baselines](./concepts/baselines.md)** — baseline lifecycle & approval
+- **[OSS vs Cloud](./oss-vs-cloud.md)** — capability matrix
+- **[Playwright adapter](./frameworks/playwright.md)** / **[WebdriverIO adapter](./frameworks/webdriverio.md)**
+- **[GitHub Action](./github-action.md)** — post results to PRs
+- **[Extension API](./extension-api.md)** — write a community adapter for your framework
 - **[Guides: CI/CD](./guides/ci-cd.md)** — running OSS lane in GitHub Actions
