@@ -146,6 +146,17 @@ async function main(): Promise<void> {
     assert.ok(playwrightSdk.testivai, '@testivai/witness-playwright should export `testivai`');
     assert.strictEqual(typeof playwrightSdk.testivai.witness, 'function', 'testivai.witness should be a function');
 
+    // 5. Verify @testivai/witness-webdriverio entry points load
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const wdioSdk = require('@testivai/witness-webdriverio');
+    assert.ok(wdioSdk.testivai, '@testivai/witness-webdriverio should export `testivai`');
+    assert.strictEqual(typeof wdioSdk.testivai.witness, 'function', 'wdio testivai.witness should be a function');
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const wdioSvc = require('@testivai/witness-webdriverio/service');
+    assert.ok(wdioSvc.TestivaiService, '@testivai/witness-webdriverio/service should export TestivaiService');
+    assert.strictEqual(typeof wdioSvc.TestivaiService, 'function', 'TestivaiService should be a class');
+    assert.strictEqual(typeof new wdioSvc.TestivaiService().onComplete, 'function', 'service should expose onComplete');
+
     console.log('[e2e] ✓ All smoke checks passed.');
   } finally {
     // Clean up temp directory

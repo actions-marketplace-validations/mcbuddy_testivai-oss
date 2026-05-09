@@ -16,6 +16,7 @@ This is the public, open-source home for the TestivAI SDKs. It contains everythi
 | [`@testivai/common`](./packages/common) | `0.2.2` | Shared utilities (config loading, API client, auth, compression) |
 | [`@testivai/witness`](./packages/witness) | `1.0.2` | Core SDK: CLI, local diffing, baselines, HTML report generator |
 | [`@testivai/witness-playwright`](./packages/playwright) | `1.1.3` | Playwright reporter/adapter built on top of `@testivai/witness` |
+| [`@testivai/witness-webdriverio`](./packages/webdriverio) | `0.1.0` | WebdriverIO service + capture function (local mode) |
 
 Plus:
 - [`action/`](./action) — GitHub Action for PR-based visual approvals

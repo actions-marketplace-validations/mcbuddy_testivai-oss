@@ -8,7 +8,8 @@
   },
   "dependencies": {
     "@testivai/witness": "workspace:*",
-    "@testivai/witness-playwright": "workspace:*"
+    "@testivai/witness-playwright": "workspace:*",
+    "@testivai/witness-webdriverio": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.10.0",
