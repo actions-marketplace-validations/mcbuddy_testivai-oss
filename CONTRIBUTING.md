@@ -9,7 +9,8 @@ This repository was extracted from the private TestivAI monorepo with a fresh gi
 - `@testivai/common`
 - `@testivai/witness`
 - `@testivai/witness-playwright`
-- The TestivAI GitHub Action
+- `@testivai/witness-webdriverio`
+- The TestivAI GitHub Action (published at `mcbuddy/testivai-oss@v1`)
 
 ## Setup
 
@@ -21,20 +22,69 @@ Requirements:
 pnpm install
 pnpm build
 pnpm test
+pnpm e2e
 ```
 
 ## Workflow
 
 1. Create a topic branch from `main`
 2. Make focused changes (one logical change per PR)
-3. Run `pnpm build`, `pnpm test`, and `pnpm e2e` locally
-4. Open a PR with a clear description and rationale
+3. **If your change touches a published package, add a changeset** (see below)
+4. Run `pnpm build`, `pnpm test`, and `pnpm e2e` locally
+5. Open a PR with a clear description and rationale
+
+## Releases — Changesets
+
+This repo uses [Changesets](https://github.com/changesets/changesets) for versioning and publishing. Releases are PR-driven, not manual.
+
+### When you need a changeset
+
+Add a changeset whenever your PR changes a **published** package's source, types, runtime behavior, or public API:
+
+- ✅ `packages/common`, `packages/witness`, `packages/playwright`, `packages/webdriverio`
+- ❌ Docs-only, CI-only, `e2e/`, `action/` (these are `ignore`d in the changesets config)
+
+### How to add one
+
+```bash
+pnpm changeset
+```
+
+The CLI walks you through:
+1. Pick which packages your PR affects
+2. Pick the bump level for each (`patch` / `minor` / `major`)
+3. Write a one-line summary of the change
+
+This creates a markdown file under `.changeset/` like `cool-cats-jump.md`. Commit it with your PR.
+
+#### Bump-level guide
+
+| Type of change | Bump |
+|---|---|
+| Bug fix; no API surface change | `patch` |
+| New optional API; backward compatible | `minor` |
+| Removed/renamed export, changed type, behavior break | `major` |
+
+When you bump `@testivai/witness` (the core), the adapter packages (`witness-playwright`, `witness-webdriverio`) automatically receive a `patch` bump because they depend on it via `workspace:*`. You don't need to add a separate changeset for the cascade — it happens during `version-packages`.
+
+### What happens after merge
+
+1. Your PR merges to `main`.
+2. The Release workflow opens (or updates) a tracking PR titled **"chore(release): version packages"** that contains the version bumps + per-package CHANGELOG.md entries derived from your changeset.
+3. A maintainer reviews + merges the tracking PR.
+4. The Release workflow re-runs and publishes the bumped packages to npm with provenance attestations.
+
+A maintainer can also run the workflow manually via the **Actions** tab if needed (escape hatch for hotfixes).
 
 ## Code Style
 
 - TypeScript everywhere
-- Follow the existing module boundaries (`common` → `witness` → `playwright`)
+- Follow the existing module boundaries (`common` → `witness` → `playwright` / `webdriverio`)
 - Keep runtime dependencies lean; prefer adding to `common` over duplicating
+- New public APIs need:
+  - JSDoc on the export
+  - A unit test
+  - A line in the package README if user-facing
 
 ## Reporting Issues
 

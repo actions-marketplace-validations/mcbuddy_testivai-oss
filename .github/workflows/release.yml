@@ -1,47 +1,64 @@
 name: Release
 
+# PR-driven publishing via Changesets.
+#
+# Workflow shape:
+#   1. Contributors add a changeset (`pnpm changeset`) in their PR; the
+#      changeset markdown declares which packages bump and at what level.
+#   2. When that PR merges to main, this workflow runs in "version" mode
+#      and opens (or updates) a tracking PR titled "chore(release): version
+#      packages" — that PR contains the version bumps + per-package
+#      CHANGELOG.md entries derived from all unreleased changesets.
+#   3. Maintainer reviews + merges the tracking PR. When that merges to
+#      main, this workflow re-runs and now finds no pending changesets,
+#      so it switches to "publish" mode: builds + tests + publishes the
+#      bumped packages to npm with provenance attestations.
+#
+# Replaces the previous workflow_dispatch approach where the maintainer
+# had to manually pick package + tag and re-trigger 3-4 times to ship a
+# coordinated release.
+#
+# Manual dispatch is preserved as an escape hatch (e.g. emergency hotfix
+# without going through the version-PR flow).
+
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      package:
-        description: 'Package to publish'
-        required: true
-        type: choice
-        options:
-          - '@testivai/common'
-          - '@testivai/witness'
-          - '@testivai/witness-playwright'
-      tag:
-        description: 'npm dist-tag'
-        required: true
-        default: 'next'
-        type: choice
-        options:
-          - 'next'
-          - 'latest'
+
+concurrency:
+  # Serialize on main so two merges don't race the version-PR.
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  pull-requests: write
+  id-token: write
 
 jobs:
-  publish:
-    name: Publish ${{ inputs.package }} (${{ inputs.tag }})
+  release:
+    name: Release (Changesets)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: read
-      id-token: write
+    timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # Full history so changesets/action can write CHANGELOGs that
+          # link to the right PR/commit refs.
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: 10
+          cache: 'pnpm'
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -55,8 +72,34 @@ jobs:
       - name: Run OSS smoke E2E
         run: pnpm e2e
 
-      - name: Publish
-        run: pnpm --filter ${{ inputs.package }} publish --tag ${{ inputs.tag }} --access public --no-git-checks --provenance
+      - name: Create release PR or publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          # `pnpm release` runs `changeset publish`, which:
+          #   - finds the package versions on disk that are AHEAD of npm
+          #   - publishes them with `--provenance` (set in package.json
+          #     publishConfig + the NPM_CONFIG_PROVENANCE env below)
+          # If pending changesets exist, the action instead opens/updates
+          # the version-PR and skips publishing.
+          publish: pnpm release
+          version: pnpm version-packages
+          commit: 'chore(release): version packages'
+          title: 'chore(release): version packages'
+          createGithubReleases: true
         env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: "true"
+          NPM_CONFIG_PROVENANCE: 'true'
+
+      - name: Summary
+        if: always()
+        run: |
+          if [ "${{ steps.changesets.outputs.published }}" = "true" ]; then
+            echo "::notice::Published packages:"
+            echo '${{ steps.changesets.outputs.publishedPackages }}'
+          elif [ -n "${{ steps.changesets.outputs.pullRequestNumber }}" ]; then
+            echo "::notice::Version PR open: #${{ steps.changesets.outputs.pullRequestNumber }}"
+          else
+            echo "::notice::No pending changesets, nothing to release."
+          fi
