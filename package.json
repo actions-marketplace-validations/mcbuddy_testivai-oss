@@ -22,9 +22,13 @@
     "test:unit": "pnpm -r --filter \"./packages/**\" run test:unit",
     "clean": "pnpm -r --filter \"./packages/**\" run clean",
     "pack:dry": "pnpm -r --filter \"./packages/**\" exec npm pack --dry-run",
-    "e2e": "pnpm --filter @testivai-oss/e2e run test"
+    "e2e": "pnpm --filter @testivai-oss/e2e run test",
+    "changeset": "changeset",
+    "version-packages": "changeset version && pnpm install --lockfile-only",
+    "release": "pnpm build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.31.0",
     "typescript": "^5.3.0"
   }
 }
