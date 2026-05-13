@@ -27,6 +27,10 @@ inputs:
     description: 'Number of days to retain the artifact'
     required: false
     default: '30'
+  embed-images:
+    description: 'Upload diff images to GitHub and embed baseline/current/diff in the PR comment'
+    required: false
+    default: 'true'
 
 runs:
   using: 'node20'

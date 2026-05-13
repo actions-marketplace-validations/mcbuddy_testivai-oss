@@ -2,7 +2,7 @@
  * PR comment builder for TestivAI visual reports
  */
 
-import { ResultsData, SnapshotResult } from './types';
+import { ResultsData, SnapshotResult, SnapshotImageUrls } from './types';
 
 const UPSERT_MARKER = '<!-- testivai-visual-report -->';
 
@@ -38,9 +38,50 @@ function renderDomHintMarkdown(snapshot: SnapshotResult): string {
 }
 
 /**
- * Build markdown PR comment from results
+ * Render a 3-column image comparison table (baseline | current | diff).
+ * Only columns with a URL are included — so a diff-only upload shows 1 col.
+ * Returns empty string if no URLs are provided.
  */
-export function buildComment(results: ResultsData): string {
+function renderImageTable(images: SnapshotImageUrls): string {
+  const cols: string[] = [];
+  const imgs: string[] = [];
+
+  if (images.baseline) {
+    cols.push('Baseline');
+    imgs.push(`![baseline](${images.baseline})`);
+  }
+  if (images.current) {
+    cols.push('Current');
+    imgs.push(`![current](${images.current})`);
+  }
+  if (images.diff) {
+    cols.push('Diff');
+    imgs.push(`![diff](${images.diff})`);
+  }
+
+  if (cols.length === 0) return '';
+
+  return `| ${cols.join(' | ')} |
+| ${cols.map(() => ':---:').join(' | ')} |
+| ${imgs.join(' | ')} |
+
+`;
+}
+
+/**
+ * Build markdown PR comment from results.
+ *
+ * @param results   Parsed results.json
+ * @param imageUrls Optional map of snapshot name → uploaded image URLs.
+ *                  When provided, a before/current/diff image table is
+ *                  rendered inside each changed-snapshot <details> block.
+ *                  If image upload failed for a snapshot, pass undefined or
+ *                  omit the entry — the comment degrades to text-only.
+ */
+export function buildComment(
+  results: ResultsData,
+  imageUrls?: Map<string, SnapshotImageUrls>,
+): string {
   const { summary, snapshots } = results;
 
   // Header with emoji summary
@@ -60,17 +101,20 @@ ${summaryLine}
 
 `;
 
-  // Show changed snapshots with approve command + DOM noise hint
+  // Show changed snapshots with approve command + DOM noise hint + diff images
   const changedSnapshots = snapshots.filter(s => s.status === 'changed');
   if (changedSnapshots.length > 0) {
     comment += '#### Changed Snapshots\n\n';
     for (const snapshot of changedSnapshots) {
       const diffPercent = formatDiffPercent(snapshot);
       const domHint = renderDomHintMarkdown(snapshot);
+      const images = imageUrls?.get(snapshot.name);
+      const imageTable = images ? renderImageTable(images) : '';
+
       comment += `<details>
 <summary><code>${snapshot.name}</code> — ${diffPercent}% different</summary>
 
-${domHint}\`\`\`bash
+${domHint}${imageTable}\`\`\`bash
 npx testivai approve "${snapshot.name}"
 # Or approve all changed snapshots:
 npx testivai approve --all
