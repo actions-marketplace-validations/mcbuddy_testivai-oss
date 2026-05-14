@@ -1,0 +1,273 @@
+name: 'TestivAI Baseline Approver'
+description: >
+  Listens for /testivai approve commands on pull request comments and
+  updates committed baselines from the latest visual-report artifact.
+  Only collaborators with write access can trigger an approval.
+author: 'TestivAI'
+
+branding:
+  icon: 'check-circle'
+  color: 'green'
+
+inputs:
+  github-token:
+    description: >
+      GitHub token. Must have contents:write (to commit baselines) and
+      pull-requests:write (to post reply comments). Use secrets.GITHUB_TOKEN
+      — no additional secrets needed.
+    required: true
+    default: ${{ github.token }}
+
+  baselines-dir:
+    description: 'Repository-relative path to the committed baselines directory.'
+    required: false
+    default: '.testivai/baselines'
+
+  artifact-name:
+    description: >
+      Name of the workflow artifact that contains the visual report and
+      pending baselines. Must match the artifact-name used in the
+      mcbuddy/testivai-oss@v1 reporter step.
+    required: false
+    default: 'testivai-visual-report'
+
+runs:
+  using: 'composite'
+  steps:
+
+    # ── Step 1: Parse command, verify commenter, resolve PR branch ──────────
+    - name: Parse command + verify permissions
+      id: auth
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        result-encoding: json
+        script: |
+          const body = context.payload.comment?.body?.trim() ?? '';
+
+          // Only handle /testivai commands
+          const match = body.match(/^\/testivai\s+(approve)\s*(.+)?$/i);
+          if (!match) {
+            core.info('Not a /testivai command — skipping.');
+            return { skip: true };
+          }
+
+          const cmd    = match[1].toLowerCase();   // 'approve'
+          const target = (match[2] ?? '--all').trim(); // name or '--all'
+
+          // Verify the commenter has write access to this repo
+          let permission = 'none';
+          try {
+            const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner:    context.repo.owner,
+              repo:     context.repo.repo,
+              username: context.actor,
+            });
+            permission = data.permission;
+          } catch {
+            // actor is not a collaborator at all
+          }
+
+          if (!['write', 'maintain', 'admin'].includes(permission)) {
+            await github.rest.issues.createComment({
+              owner:        context.repo.owner,
+              repo:         context.repo.repo,
+              issue_number: context.issue.number,
+              body: `⛔ @${context.actor} — only collaborators with **write** access can approve visual baselines.`,
+            });
+            return { skip: true };
+          }
+
+          // Resolve the PR's head branch
+          const { data: pr } = await github.rest.pulls.get({
+            owner:       context.repo.owner,
+            repo:        context.repo.repo,
+            pull_number: context.issue.number,
+          });
+
+          core.info(`Command: /testivai ${cmd} ${target} (by @${context.actor}, branch: ${pr.head.ref})`);
+
+          return {
+            skip:   false,
+            cmd,
+            target,
+            branch: pr.head.ref,
+            actor:  context.actor,
+          };
+
+    # ── Step 2: Checkout the PR branch ─────────────────────────────────────
+    - name: Checkout PR branch
+      if: ${{ fromJson(steps.auth.outputs.result).skip != true }}
+      uses: actions/checkout@v4
+      with:
+        token: ${{ inputs.github-token }}
+        ref:   ${{ fromJson(steps.auth.outputs.result).branch }}
+
+    # ── Step 3: Download the visual-report artifact ─────────────────────────
+    - name: Download visual-report artifact
+      if: ${{ fromJson(steps.auth.outputs.result).skip != true }}
+      shell: bash
+      env:
+        GH_TOKEN:       ${{ inputs.github-token }}
+        ARTIFACT_NAME:  ${{ inputs.artifact-name }}
+        PR_BRANCH:      ${{ fromJson(steps.auth.outputs.result).branch }}
+      run: |
+        set -euo pipefail
+
+        echo "Looking for latest TestivAI OSS run on branch: $PR_BRANCH"
+
+        # Find the most recent completed run for this branch that has our artifact
+        RUN_ID=$(gh run list \
+          --repo  "$GITHUB_REPOSITORY" \
+          --branch "$PR_BRANCH" \
+          --limit  10 \
+          --json  databaseId,conclusion,workflowName \
+          --jq    '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[0].databaseId // empty')
+
+        if [ -z "$RUN_ID" ]; then
+          echo "::error::No completed workflow run found for branch '$PR_BRANCH'. Run the visual regression tests first."
+          exit 1
+        fi
+
+        echo "Downloading artifact '$ARTIFACT_NAME' from run $RUN_ID..."
+        mkdir -p /tmp/testivai-artifact
+
+        gh run download "$RUN_ID" \
+          --repo "$GITHUB_REPOSITORY" \
+          --name "$ARTIFACT_NAME" \
+          --dir  /tmp/testivai-artifact
+
+        echo "Artifact downloaded. Contents:"
+        find /tmp/testivai-artifact -type f | sort | head -40
+
+    # ── Step 4: Copy pending baselines into .testivai/baselines/ ───────────
+    - name: Apply baseline approvals
+      if: ${{ fromJson(steps.auth.outputs.result).skip != true }}
+      id: apply
+      shell: bash
+      env:
+        TARGET:        ${{ fromJson(steps.auth.outputs.result).target }}
+        BASELINES_DIR: ${{ inputs.baselines-dir }}
+      run: |
+        set -euo pipefail
+
+        PENDING_DIR="/tmp/testivai-artifact/pending-baselines"
+
+        if [ ! -d "$PENDING_DIR" ]; then
+          echo "::error::No pending-baselines found in the artifact."
+          echo "Make sure you are using mcbuddy/testivai-oss@v1 (v1.0.2+) with upload-artifact: true."
+          exit 1
+        fi
+
+        echo "Available pending baselines:"
+        ls "$PENDING_DIR"
+
+        # Resolve snapshot names to approve
+        if [ "$TARGET" = "--all" ]; then
+          NAMES=$(ls "$PENDING_DIR")
+        else
+          NAMES="$TARGET"
+        fi
+
+        APPROVED_LIST=""
+        SKIPPED_LIST=""
+
+        for name in $NAMES; do
+          SRC="$PENDING_DIR/$name"
+          DST="$BASELINES_DIR/$name"
+
+          if [ ! -d "$SRC" ]; then
+            echo "::warning::Snapshot '$name' not found in pending baselines — skipping."
+            SKIPPED_LIST="$SKIPPED_LIST $name"
+            continue
+          fi
+
+          mkdir -p "$DST"
+          cp -r "$SRC/." "$DST/"
+          echo "  ✓ approved: $name"
+          APPROVED_LIST="$APPROVED_LIST $name"
+        done
+
+        # Trim leading spaces
+        APPROVED_LIST="${APPROVED_LIST# }"
+        SKIPPED_LIST="${SKIPPED_LIST# }"
+        COUNT=$(echo "$APPROVED_LIST" | tr ' ' '\n' | grep -c . || true)
+
+        echo "approved=$APPROVED_LIST"  >> "$GITHUB_OUTPUT"
+        echo "skipped=$SKIPPED_LIST"   >> "$GITHUB_OUTPUT"
+        echo "count=$COUNT"            >> "$GITHUB_OUTPUT"
+
+    # ── Step 5: Commit and push the updated baselines ──────────────────────
+    - name: Commit updated baselines
+      if: ${{ fromJson(steps.auth.outputs.result).skip != true && steps.apply.outputs.count != '0' }}
+      shell: bash
+      env:
+        APPROVED:      ${{ steps.apply.outputs.approved }}
+        ACTOR:         ${{ fromJson(steps.auth.outputs.result).actor }}
+        BASELINES_DIR: ${{ inputs.baselines-dir }}
+      run: |
+        set -euo pipefail
+
+        git config user.name  "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        git add "$BASELINES_DIR/"
+
+        if git diff --cached --quiet; then
+          echo "Nothing new to commit — baselines already up to date."
+          exit 0
+        fi
+
+        # Build a compact snapshot list for the commit message
+        SNAPSHOT_LINE=$(echo "$APPROVED" | tr ' ' ', ')
+        git commit -m "chore(baselines): approve visual snapshots
+
+Approved by @$ACTOR via PR comment.
+Snapshots: $SNAPSHOT_LINE"
+
+        git push
+
+    # ── Step 6: Post confirmation comment ───────────────────────────────────
+    - name: Post confirmation comment
+      if: ${{ fromJson(steps.auth.outputs.result).skip != true }}
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const approved = '${{ steps.apply.outputs.approved }}'.trim().split(/\s+/).filter(Boolean);
+          const skipped  = '${{ steps.apply.outputs.skipped  }}'.trim().split(/\s+/).filter(Boolean);
+          const count    = parseInt('${{ steps.apply.outputs.count }}') || 0;
+          const actor    = '${{ fromJson(steps.auth.outputs.result).actor }}';
+
+          let body = '';
+
+          if (count === 0) {
+            body = [
+              `⚠️ No baselines were updated.`,
+              ``,
+              `Possible reasons:`,
+              `- The snapshot name(s) don't match any pending changes.`,
+              `- The artifact is from a run where no visual differences were detected.`,
+              `- Re-run the OSS visual regression tests and try again.`,
+            ].join('\n');
+          } else {
+            const list = approved.map(n => `- \`${n}\``).join('\n');
+            const skipNote = skipped.length
+              ? `\n\n⚠️ Not found in pending baselines: ${skipped.map(n => `\`${n}\``).join(', ')}`
+              : '';
+            body = [
+              `✅ **${count} baseline${count === 1 ? '' : 's'} approved** by @${actor}`,
+              ``,
+              list,
+              skipNote,
+              ``,
+              `CI will re-run automatically to confirm everything passes.`,
+            ].join('\n');
+          }
+
+          await github.rest.issues.createComment({
+            owner:        context.repo.owner,
+            repo:         context.repo.repo,
+            issue_number: context.issue.number,
+            body,
+          });

@@ -91,6 +91,98 @@ Set `TESTIVAI_API_KEY` in your shell to opt into the [hosted TestivAI service](h
 
 Cloud mode is **opt-in**. The SDKs work entirely locally without it.
 
+## CI Integration (GitHub Actions)
+
+Copy this single workflow file into your repository. It handles both running the visual regression tests **and** processing `/testivai approve` commands from PR comments — no extra secrets, no external services required.
+
+```yaml
+# .github/workflows/testivai-oss.yml
+name: TestivAI OSS
+
+on:
+  pull_request:
+    branches: [main]
+  issue_comment:
+    types: [created]        # listens for /testivai approve commands
+
+permissions:
+  contents: write           # approve action commits updated baselines to the branch
+  pull-requests: write      # post PR diff comment
+  statuses: write           # set pass/fail indicator on the PR
+
+jobs:
+
+  # Runs on every PR — captures screenshots, diffs against baselines, posts report
+  visual-regression:
+    name: Visual Regression (OSS)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '20', cache: 'npm' }
+      - run: npm ci
+      - run: npx playwright install chromium --with-deps
+      - run: npm run build
+      - run: npm run test:oss          # runs playwright.oss.config.ts
+
+      - name: Post results + upload report
+        uses: mcbuddy/testivai-oss@v1
+        if: always()
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          report-dir: visual-report   # where @testivai/witness writes results.json
+
+  # Runs when a collaborator comments /testivai approve on the PR
+  approve-baselines:
+    name: Approve Baselines
+    if: |
+      github.event_name == 'issue_comment' &&
+      github.event.issue.pull_request != null &&
+      startsWith(github.event.comment.body, '/testivai')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: mcbuddy/testivai-oss/approve@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+### Approve changed baselines
+
+After CI posts the diff report on your PR, review the `testivai-visual-report` artifact, then comment:
+
+| Comment | Effect |
+|---|---|
+| `/testivai approve homepage` | Approves one named snapshot |
+| `/testivai approve --all` | Approves every changed snapshot at once |
+
+**What happens:**
+1. Action verifies you have **write** access to the repository (others get a polite rejection)
+2. Downloads the `testivai-visual-report` artifact from the latest CI run on your branch
+3. Copies approved screenshots into `.testivai/baselines/` and commits them to your PR branch
+4. Posts a confirmation comment listing what was approved
+5. CI re-runs automatically — approved snapshots now pass ✅
+
+### What the PR comment looks like
+
+```
+🔍 TestivAI Visual Report
+
+⚠️ 2 changed · 🆕 1 new · ✅ 4 passed   Total snapshots: 7
+
+Changed Snapshots
+
+▼ homepage — 12.34% different
+  💡 DOM unchanged — pixel diff is likely render noise (font hinting, anti-aliasing).
+
+▼ dashboard — 8.91% different
+  🧱 DOM changed — 2 added, 1 removed.
+```
+
+---
+
 ## Real-World Example
 
 A complete consumer application using the OSS lane lives at [`testivai-demo-app`](https://github.com/mcbuddy/testivai-demo-app) under `tests-oss/` and `playwright.oss.config.ts`. It runs against the published packages on every commit.

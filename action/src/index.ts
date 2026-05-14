@@ -147,7 +147,27 @@ async function run(): Promise<void> {
 
     const results: ResultsData = JSON.parse(fs.readFileSync(resultsPath, 'utf-8'));
 
-    // Upload artifact if enabled (recursive so images/ subdirectory is included)
+    // Bundle pending baselines into the report dir so the approve action can
+    // access them when a developer posts /testivai approve on the PR.
+    // .testivai/temp/<name>/ is generated during the test run and is not
+    // committed to the repo; copying it here makes it available in the artifact.
+    const tempDir = path.join(process.cwd(), '.testivai', 'temp');
+    if (fs.existsSync(tempDir)) {
+      const pendingDir = path.join(reportDir, 'pending-baselines');
+      fs.mkdirSync(pendingDir, { recursive: true });
+      let copied = 0;
+      for (const name of fs.readdirSync(tempDir)) {
+        const src = path.join(tempDir, name);
+        const dst = path.join(pendingDir, name);
+        if (fs.statSync(src).isDirectory()) {
+          fs.cpSync(src, dst, { recursive: true });
+          copied++;
+        }
+      }
+      if (copied > 0) core.info(`Bundled ${copied} pending baseline(s) for approval`);
+    }
+
+    // Upload artifact if enabled (recursive so images/ and pending-baselines/ are included)
     if (uploadArtifact) {
       const artifactClient = new artifact.DefaultArtifactClient();
       const artifactName = 'testivai-visual-report';
