@@ -57,14 +57,19 @@ async function uploadImageAsset(
     });
 
     if (!response.ok) {
-      core.debug(`Image upload failed for ${filename}: ${response.status} ${response.statusText}`);
+      const body = await response.text().catch(() => '');
+      core.info(`Image upload failed for ${filename}: HTTP ${response.status} ${response.statusText}${body ? ` — ${body.slice(0, 200)}` : ''}`);
       return null;
     }
 
     const data = await response.json() as { contentUrl?: string; url?: string };
-    return data.contentUrl ?? data.url ?? null;
+    const resultUrl = data.contentUrl ?? data.url ?? null;
+    if (!resultUrl) {
+      core.info(`Image upload for ${filename}: no URL in response — keys: ${Object.keys(data).join(', ')}`);
+    }
+    return resultUrl;
   } catch (err) {
-    core.debug(`Image upload error for ${filename}: ${err}`);
+    core.info(`Image upload error for ${filename}: ${err}`);
     return null;
   }
 }
