@@ -1,6 +1,6 @@
 {
   "name": "@testivai/witness",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Framework-agnostic visual regression testing CLI for TestivAI",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,10 +28,18 @@
   },
   "typesVersions": {
     "*": {
-      "diff": ["dist/diff/index.d.ts"],
-      "baselines": ["dist/baselines/index.d.ts"],
-      "config": ["dist/config/index.d.ts"],
-      "report": ["dist/report/index.d.ts"]
+      "diff": [
+        "dist/diff/index.d.ts"
+      ],
+      "baselines": [
+        "dist/baselines/index.d.ts"
+      ],
+      "config": [
+        "dist/config/index.d.ts"
+      ],
+      "report": [
+        "dist/report/index.d.ts"
+      ]
     }
   },
   "bin": {
