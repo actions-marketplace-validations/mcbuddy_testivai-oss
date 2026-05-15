@@ -81622,14 +81622,19 @@ async function uploadImageAsset(token, owner, repo, prNumber, imagePath, filenam
             body: imageBuffer,
         });
         if (!response.ok) {
-            core.debug(`Image upload failed for ${filename}: ${response.status} ${response.statusText}`);
+            const body = await response.text().catch(() => '');
+            core.info(`Image upload failed for ${filename}: HTTP ${response.status} ${response.statusText}${body ? ` — ${body.slice(0, 200)}` : ''}`);
             return null;
         }
         const data = await response.json();
-        return data.contentUrl ?? data.url ?? null;
+        const resultUrl = data.contentUrl ?? data.url ?? null;
+        if (!resultUrl) {
+            core.info(`Image upload for ${filename}: no URL in response — keys: ${Object.keys(data).join(', ')}`);
+        }
+        return resultUrl;
     }
     catch (err) {
-        core.debug(`Image upload error for ${filename}: ${err}`);
+        core.info(`Image upload error for ${filename}: ${err}`);
         return null;
     }
 }
@@ -81678,7 +81683,27 @@ async function run() {
             return;
         }
         const results = JSON.parse(fs.readFileSync(resultsPath, 'utf-8'));
-        // Upload artifact if enabled (recursive so images/ subdirectory is included)
+        // Bundle pending baselines into the report dir so the approve action can
+        // access them when a developer posts /testivai approve on the PR.
+        // .testivai/temp/<name>/ is generated during the test run and is not
+        // committed to the repo; copying it here makes it available in the artifact.
+        const tempDir = path.join(process.cwd(), '.testivai', 'temp');
+        if (fs.existsSync(tempDir)) {
+            const pendingDir = path.join(reportDir, 'pending-baselines');
+            fs.mkdirSync(pendingDir, { recursive: true });
+            let copied = 0;
+            for (const name of fs.readdirSync(tempDir)) {
+                const src = path.join(tempDir, name);
+                const dst = path.join(pendingDir, name);
+                if (fs.statSync(src).isDirectory()) {
+                    fs.cpSync(src, dst, { recursive: true });
+                    copied++;
+                }
+            }
+            if (copied > 0)
+                core.info(`Bundled ${copied} pending baseline(s) for approval`);
+        }
+        // Upload artifact if enabled (recursive so images/ and pending-baselines/ are included)
         if (uploadArtifact) {
             const artifactClient = new artifact.DefaultArtifactClient();
             const artifactName = 'testivai-visual-report';
