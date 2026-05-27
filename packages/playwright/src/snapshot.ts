@@ -69,7 +69,35 @@ export async function snapshot(
 
   // 1. Capture full-page screenshot
   const screenshotPath = path.join(outputDir, `${baseFilename}.png`);
-  
+
+  // In local mode: hide elements matching ignoreSelectors before the screenshot
+  // so dynamic content (version badges, timestamps, ads) doesn't cause false diffs.
+  // Sources (merged, deduped):
+  //   1. .testivai/config.json  → ignoreSelectors  (global, OSS config)
+  //   2. testivai.config.ts     → ignoreSelectors  (global, power users)
+  //   3. testivai.witness(...)  → { ignoreSelectors } (per-snapshot override)
+  let ignoreStyleEl: import('@playwright/test').ElementHandle | null = null;
+  if (isLocalMode) {
+    // Read global ignores from .testivai/config.json
+    let witnessConfigIgnore: string[] = [];
+    try {
+      const witnessConfigPath = path.join(process.cwd(), '.testivai', 'config.json');
+      if (fs.existsSync(witnessConfigPath)) {
+        const raw = JSON.parse(fs.readFileSync(witnessConfigPath, 'utf-8'));
+        witnessConfigIgnore = raw.ignoreSelectors ?? [];
+      }
+    } catch { /* ignore malformed config */ }
+
+    const playwrightConfigIgnore: string[] = (projectConfig as any).ignoreSelectors ?? [];
+    const perSnapshotIgnore: string[] = effectiveConfig.ignoreSelectors ?? [];
+    const allSelectors = [...new Set([...witnessConfigIgnore, ...playwrightConfigIgnore, ...perSnapshotIgnore])];
+
+    if (allSelectors.length > 0) {
+      const css = allSelectors.map(s => `${s} { visibility: hidden !important; }`).join('\n');
+      ignoreStyleEl = await page.addStyleTag({ content: css });
+    }
+  }
+
   // Check if scroll-and-stitch is explicitly requested (backup method)
   if (effectiveConfig.useBrowserCapture === false) {
     // Use scroll-and-stitch approach (backup method)
@@ -315,6 +343,12 @@ export async function snapshot(
       // Fallback to regular screenshot
       await page.screenshot({ path: screenshotPath, fullPage: true });
     }
+  }
+
+  // Restore any elements hidden for ignoreSelectors
+  if (ignoreStyleEl) {
+    await ignoreStyleEl.evaluate((el: Element) => el.remove()).catch(() => {});
+    ignoreStyleEl = null;
   }
 
   // 1.5. Local mode: also place the screenshot in the layout expected by
