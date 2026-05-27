@@ -5,6 +5,7 @@ import { URL } from 'url';
 import sharp from 'sharp';
 import { SnapshotPayload, LayoutData, TestivAIConfig, StructureAnalysis, StructureAnalysisConfig } from './types';
 import { loadConfig, mergeTestConfig } from './config/loader';
+import { collectIgnoreSelectors, buildIgnoreSelectorsCSS } from './config/ignore-selectors';
 
 /**
  * Generates a safe filename from a URL.
@@ -72,28 +73,15 @@ export async function snapshot(
 
   // In local mode: hide elements matching ignoreSelectors before the screenshot
   // so dynamic content (version badges, timestamps, ads) doesn't cause false diffs.
-  // Sources (merged, deduped):
+  // Sources (merged, deduped) — see config/ignore-selectors.ts:
   //   1. .testivai/config.json  → ignoreSelectors  (global, OSS config)
   //   2. testivai.config.ts     → ignoreSelectors  (global, power users)
   //   3. testivai.witness(...)  → { ignoreSelectors } (per-snapshot override)
   let ignoreStyleEl: import('@playwright/test').ElementHandle | null = null;
   if (isLocalMode) {
-    // Read global ignores from .testivai/config.json
-    let witnessConfigIgnore: string[] = [];
-    try {
-      const witnessConfigPath = path.join(process.cwd(), '.testivai', 'config.json');
-      if (fs.existsSync(witnessConfigPath)) {
-        const raw = JSON.parse(fs.readFileSync(witnessConfigPath, 'utf-8'));
-        witnessConfigIgnore = raw.ignoreSelectors ?? [];
-      }
-    } catch { /* ignore malformed config */ }
-
-    const playwrightConfigIgnore: string[] = (projectConfig as any).ignoreSelectors ?? [];
-    const perSnapshotIgnore: string[] = effectiveConfig.ignoreSelectors ?? [];
-    const allSelectors = [...new Set([...witnessConfigIgnore, ...playwrightConfigIgnore, ...perSnapshotIgnore])];
-
-    if (allSelectors.length > 0) {
-      const css = allSelectors.map(s => `${s} { visibility: hidden !important; }`).join('\n');
+    const allSelectors = collectIgnoreSelectors(process.cwd(), projectConfig, effectiveConfig);
+    const css = buildIgnoreSelectorsCSS(allSelectors);
+    if (css) {
       ignoreStyleEl = await page.addStyleTag({ content: css });
     }
   }
