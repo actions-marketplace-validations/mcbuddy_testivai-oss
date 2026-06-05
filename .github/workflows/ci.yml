@@ -19,7 +19,7 @@ jobs:
         node: ['20', '22']
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
 
       # Setup pnpm BEFORE setup-node so setup-node's pnpm cache can find it.
       # No `version:` — pnpm/action-setup@v6 reads it from the
