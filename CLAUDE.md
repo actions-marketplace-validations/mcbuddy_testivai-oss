@@ -151,7 +151,8 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
 
 - **OSS terms**: pixel diff, DOM diff, noise hint, local mode, baselines, threshold
 - **Cloud terms**: REVEAL, 5-layer, AI counselor, smart baselines, dashboard
-- Never use cloud terminology in OSS package docs/code. Never ship CSS fingerprinting in OSS.
+- Never use cloud terminology in OSS package docs/code.
+- The OSS/cloud capability boundary is defined in `docs/oss-vs-cloud.md` (detection local, collaboration cloud); consult it before adding comparison layers to either lane.
 
 ## PR conventions
 

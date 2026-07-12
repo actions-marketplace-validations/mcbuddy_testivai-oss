@@ -37,9 +37,11 @@ The OSS lane gives you **everything you need to run visual regression locally an
 Concretely:
 
 - **Pixel + DOM** lives in OSS. Every screenshot is paired with a snapshot of the page DOM (`document.documentElement.outerHTML`). When pixels differ but DOM is structurally identical, the report flags the diff as likely render noise. This is the OSS noise hint.
-- **CSS fingerprinting + layout + AI** lives in Cloud. The 5-layer engine uses computed-style comparison plus a layout-tree differ plus a Gemini-backed counselor to surface "why" the diff happened. These layers are deliberately not in OSS.
+- **CSS fingerprinting + layout + AI** lives in Cloud today. The 5-layer engine uses computed-style comparison plus a layout-tree differ plus a Gemini-backed counselor to surface "why" the diff happened.
 
-This split is permanent. OSS won't grow CSS fingerprinting; cloud won't drop dashboard/history. If you only need local visual regression for a small team or a single project, the OSS lane is sufficient. If you need cross-run history, REVEAL explanations, or team approval workflows, that's what cloud is for.
+The guiding principle: **detection runs where your code runs; collaboration runs in the cloud.** Everything you need to capture, diff, and decide locally belongs in OSS, and the OSS lane will keep getting better at detection. What the cloud lane owns is team-scale state — cross-run history, dashboards, shared approvals, and AI explanations — the things that only make sense with a hosted service behind them.
+
+If you only need local visual regression for a small team or a single project, the OSS lane is sufficient. If you need cross-run history, REVEAL explanations, or team approval workflows, that's what cloud is for.
 
 ## How to switch lanes
 
