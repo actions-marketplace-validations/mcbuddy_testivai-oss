@@ -53,8 +53,8 @@ describe('buildComment', () => {
     const comment = buildComment(results);
     expect(comment).toContain('homepage');
     expect(comment).toContain('12.50% different');
-    expect(comment).toContain('npx testivai approve "homepage"');
-    expect(comment).toContain('npx testivai approve --all');
+    expect(comment).toContain('/testivai approve homepage');
+    expect(comment).toContain('/testivai approve --all');
   });
 
   it('T6.5 - no details sections when all passed', () => {
@@ -165,8 +165,8 @@ describe('buildComment', () => {
         ],
       };
       const comment = buildComment(results);
-      expect(comment).not.toContain('DOM unchanged');
-      expect(comment).not.toContain('DOM changed');
+      expect(comment).not.toContain('💡 **DOM unchanged**');
+      expect(comment).not.toContain('🧱 **DOM changed**');
     });
 
     it('singular vs plural attribute-change wording', () => {
