@@ -16,15 +16,14 @@ const program = new Command();
 const showBanner = () => {
   console.log();
   console.log(chalk.cyan.bold('  TestivAI'));
-  console.log(chalk.gray('  Catch Visual Bugs Automatically'));
-  console.log(chalk.gray('  AI that catches real bugs, ignores the noise.'));
+  console.log(chalk.gray('  Local-first visual regression testing'));
   console.log();
 };
 
 program
   .name('testivai')
   .description('TestivAI Witness SDK - Framework-agnostic visual regression testing')
-  .version(packageJson.version, '-v, --version', 'Display version number')
+  .version(packageJson.version, '-V, --version', 'Display version number')
   .hook('preAction', () => {
     if (!process.argv.includes('--quiet') && !process.argv.includes('-q')) {
       showBanner();

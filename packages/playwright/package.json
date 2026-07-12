@@ -4,13 +4,9 @@
   "description": "Playwright sensor for Testivai Visual Regression Test system",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "testivai": "dist/cli/index.js"
-  },
   "exports": {
     ".": "./dist/index.js",
-    "./reporter": "./dist/reporter-entry.js",
-    "./cli": "./dist/cli/index.js"
+    "./reporter": "./dist/reporter-entry.js"
   },
   "scripts": {
     "build": "tsc",
