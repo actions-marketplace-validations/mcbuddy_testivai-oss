@@ -112,12 +112,21 @@ visual-report/
   "timestamp": "2026-04-30T...",
   "summary": { "total": 2, "passed": 0, "changed": 2, "newSnapshots": 0 },
   "snapshots": [
-    { "name": "homepage", "status": "changed", "diffPercent": 0.4, ... }
+    {
+      "name": "homepage",
+      "status": "changed",
+      "diffPercent": 0.4,
+      "dom": {
+        "changed": true,
+        "noiseHint": false,
+        "summary": { "added": 2, "removed": 1, "attributeChanges": 0 }
+      }
+    }
   ]
 }
 ```
 
-This file is what your CI should fail on. See [CI/CD guide](./guides/ci-cd.md).
+This file is what your CI should fail on. See [CI/CD guide](./guides/ci-cd.md). It is also the contract for AI coding agents: an agent can run the tests, read `results.json`, and use `dom.noiseHint` vs `dom.changed` to decide whether a diff needs human attention (see "Eyes for your coding agent" in the README).
 
 ---
 

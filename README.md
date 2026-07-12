@@ -26,6 +26,28 @@ Pixel-only visual testing drowns you in false positives — a font re-hint or an
 - 🤖 **PR-native workflow** — a GitHub Action posts the diff and approves baselines from a `/testivai approve` comment.
 - ☁️ **Optional cloud upgrade** — opt into [the hosted service](https://testiv.ai) for AI analysis, history, and team approvals. Never required.
 
+## Eyes for your coding agent
+
+If an AI agent (Claude Code, Cursor, Copilot, …) writes your UI code, someone still has to check what the UI *looks like* — and it shouldn't be you, one screenshot at a time. TestivAI is built to be that check:
+
+- **No account, no API key, no network** — an agent can run it inside any sandbox without you provisioning secrets.
+- **Machine-readable output** — every run writes `visual-report/results.json` (a [semver-governed schema](./docs/how-it-works.md)) with per-snapshot diff percentages and DOM change summaries, so an agent can read the result and self-correct.
+- **Noise-aware verdicts** — the DOM hint tells the agent whether a pixel diff is *likely render noise* or a *real structural change* (`2 added, 1 removed`), so it doesn't chase anti-aliasing ghosts.
+- **Human approval stays in the PR** — the agent iterates locally; you approve baselines with one `/testivai approve` comment.
+
+Paste this into your project's `AGENTS.md` / `CLAUDE.md` to wire it up:
+
+```markdown
+## Visual verification
+After changing any UI code, run `npx playwright test` (TestivAI captures
+screenshots automatically), then read `visual-report/results.json`.
+- `status: "changed"` with `dom.changed: true` → describe the DOM summary and
+  ask whether the change is intended before approving.
+- `status: "changed"` with `dom.noiseHint: true` → likely render noise; mention
+  it but don't block.
+- Never run `testivai approve` yourself — baseline approval is a human decision.
+```
+
 ## Packages
 
 Live versions are shown by the badges at the top of this README.
