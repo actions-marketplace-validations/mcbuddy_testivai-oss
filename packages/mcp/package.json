@@ -1,0 +1,51 @@
+{
+  "name": "@testivai/mcp",
+  "version": "0.1.0",
+  "description": "MCP server exposing TestivAI visual regression results to AI coding agents",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "testivai-mcp": "dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "jest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "visual-regression",
+    "testing",
+    "testivai",
+    "ai-agents"
+  ],
+  "author": "TestivAI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcbuddy/testivai-oss.git",
+    "directory": "packages/mcp"
+  },
+  "bugs": {
+    "url": "https://github.com/mcbuddy/testivai-oss/issues"
+  },
+  "homepage": "https://github.com/mcbuddy/testivai-oss/tree/main/packages/mcp#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.17.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.6.1",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.0",
+    "typescript": "^6.0.3"
+  }
+}

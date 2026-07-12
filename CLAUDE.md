@@ -11,6 +11,7 @@ packages/
   witness/     @testivai/witness     — core SDK: CLI, diff engine, baselines, HTML report
   playwright/  @testivai/witness-playwright  — Playwright reporter + capture adapter
   webdriverio/ @testivai/witness-webdriverio — WebdriverIO service + capture (local mode)
+  mcp/         @testivai/mcp                 — MCP server: results + diff images for AI agents (read-only; no approve tool by design)
 
 action/        mcbuddy/testivai-oss@v1      — GitHub Action: post PR comment + commit status
 approve/       mcbuddy/testivai-oss/approve@v1 — GitHub Action: /testivai approve command handler

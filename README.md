@@ -58,6 +58,7 @@ Live versions are shown by the badges at the top of this README.
 | [`@testivai/witness`](./packages/witness) | Core SDK: CLI, local diffing, baselines, HTML report generator |
 | [`@testivai/witness-playwright`](./packages/playwright) | Playwright reporter/adapter built on top of `@testivai/witness` |
 | [`@testivai/witness-webdriverio`](./packages/webdriverio) | WebdriverIO service + capture function (local mode) |
+| [`@testivai/mcp`](./packages/mcp) | MCP server — visual results + diff images for AI coding agents |
 
 Plus:
 - [`action/`](./action) — GitHub Action for PR-based visual approvals
