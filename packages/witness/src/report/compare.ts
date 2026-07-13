@@ -16,6 +16,23 @@ export interface CompareOptions {
   threshold?: number;
   projectRoot: string;
   reportDir: string;
+  /**
+   * Pass criteria — how much visual difference still counts as passed.
+   * Defaults preserve strict behavior: any pixel the diff engine flags
+   * marks the snapshot changed.
+   */
+  passCriteria?: PassCriteria;
+}
+
+export interface PassCriteria {
+  /** Pass when diff percentage (0-100) is at or below this. Default 0. */
+  maxDiffPercent?: number;
+  /** Pass when changed-pixel count is at or below this. Unset = ignored. */
+  maxDiffPixels?: number;
+  /** Auto-pass DOM-identical diffs (the noise hint) up to noiseMaxDiffPercent. Default false. */
+  noiseAutoPass?: boolean;
+  /** Upper bound (diff %, 0-100) for noiseAutoPass. Default 1. */
+  noiseMaxDiffPercent?: number;
 }
 
 /**
@@ -24,7 +41,7 @@ export interface CompareOptions {
  * @returns Array of SnapshotResult for each snapshot
  */
 export function compareAll(options: CompareOptions): SnapshotResult[] {
-  const { projectRoot, reportDir, threshold = 0.1 } = options;
+  const { projectRoot, reportDir, threshold = 0.1, passCriteria = {} } = options;
   const store = new BaselineStore(projectRoot);
   const tempNames = store.listTemp();
   const results: SnapshotResult[] = [];
@@ -84,12 +101,51 @@ export function compareAll(options: CompareOptions): SnapshotResult[] {
       if (domSignal) {
         result.dom = domSignal;
       }
+      applyPassCriteria(result, passCriteria);
     }
 
     results.push(result);
   }
 
   return results;
+}
+
+/**
+ * Turn a 'changed' result into 'passed' when it satisfies the configured
+ * pass criteria. Mutates the result: status flips to 'passed' and
+ * `autoPassed` records which criterion applied (except for a zero-count
+ * diff — byte-different but nothing the diff engine flags — which is
+ * simply passed). Diff images are kept either way.
+ */
+function applyPassCriteria(result: SnapshotResult, criteria: PassCriteria): void {
+  const {
+    maxDiffPercent = 0,
+    maxDiffPixels,
+    noiseAutoPass = false,
+    noiseMaxDiffPercent = 1,
+  } = criteria;
+
+  // Nothing above the per-pixel threshold: visually identical. Guard on
+  // totalPixels — the PNG-decode-failure path reports diffCount 0 with
+  // totalPixels 0 and must stay 'changed' for manual investigation.
+  if (result.diffCount === 0 && result.totalPixels > 0) {
+    result.status = 'passed';
+    result.diffPercent = 0;
+    return;
+  }
+
+  const withinPercent = result.diffPercent <= maxDiffPercent;
+  const withinPixels = maxDiffPixels !== undefined && result.diffCount <= maxDiffPixels;
+  if (withinPercent || withinPixels) {
+    result.status = 'passed';
+    result.autoPassed = 'threshold';
+    return;
+  }
+
+  if (noiseAutoPass && result.dom?.noiseHint && result.diffPercent <= noiseMaxDiffPercent) {
+    result.status = 'passed';
+    result.autoPassed = 'noise';
+  }
 }
 
 /**
@@ -183,13 +239,14 @@ function compareBuffers(
     const diffPath = path.join(snapshotImagesDir, 'diff.png');
     fs.writeFileSync(diffPath, diffPngBuffer);
 
+    // Status starts as 'changed'; applyPassCriteria() in compareAll may
+    // flip it to 'passed' based on the configured tolerances.
     const status: SnapshotStatus = 'changed';
-    const diffPercent = diffResult.diffPercent > 0 ? diffResult.diffPercent : 0.01;
 
     return {
       name,
       status,
-      diffPercent,
+      diffPercent: diffResult.diffPercent,
       diffCount: diffResult.diffCount,
       totalPixels: diffResult.totalPixels,
       baselinePath: `images/${name}/baseline.png`,

@@ -39,6 +39,13 @@ export interface SnapshotResult {
    * captured DOM HTML alongside the screenshot.
    */
   dom?: SnapshotDomSignal;
+  /**
+   * Present when the snapshot's pixels differed but a pass criterion
+   * reported it as passed: 'threshold' (within maxDiffPercent /
+   * maxDiffPixels) or 'noise' (DOM identical + within noiseMaxDiffPercent,
+   * with noiseAutoPass enabled). The diff image is still written.
+   */
+  autoPassed?: 'threshold' | 'noise';
 }
 
 export interface ReportSummary {

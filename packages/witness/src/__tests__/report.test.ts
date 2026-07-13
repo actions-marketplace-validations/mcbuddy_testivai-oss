@@ -267,4 +267,173 @@ describe('Report Generator', () => {
       expect(html).toContain('testiv.ai');
     });
   });
+
+  describe('pass criteria', () => {
+    const { PNG } = require('pngjs');
+
+    /** Build a WxH solid PNG, then let paint() recolor individual pixels. */
+    const makePng = (
+      w: number,
+      h: number,
+      base: [number, number, number],
+      paint?: (data: Buffer) => void,
+    ): Buffer => {
+      const png = new PNG({ width: w, height: h });
+      for (let i = 0; i < w * h; i++) {
+        png.data[i * 4] = base[0];
+        png.data[i * 4 + 1] = base[1];
+        png.data[i * 4 + 2] = base[2];
+        png.data[i * 4 + 3] = 255;
+      }
+      if (paint) paint(png.data);
+      return PNG.sync.write(png);
+    };
+
+    const GRAY: [number, number, number] = [120, 120, 120];
+    // 10x10 = 100 pixels; repainting one pixel = 1% diff
+    const baselinePng = () => makePng(10, 10, GRAY);
+    // 9 red pixels out of 100 = 9% diff (enough to clear the engine's
+    // cumulatedThreshold, which absorbs near-zero total luminance change)
+    const blockOff = () =>
+      makePng(10, 10, GRAY, (d) => {
+        for (let i = 0; i < 9; i++) {
+          d[i * 4] = 255; d[i * 4 + 1] = 0; d[i * 4 + 2] = 0;
+        }
+      });
+
+    it('keeps strict behavior by default: any flagged pixel = changed', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({ projectRoot: tmpDir, reportDir, threshold: 0.1 });
+
+      expect(results[0].status).toBe('changed');
+      expect(results[0].autoPassed).toBeUndefined();
+    });
+
+    it('passes within maxDiffPercent and labels it', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({
+        projectRoot: tmpDir,
+        reportDir,
+        threshold: 0.1,
+        passCriteria: { maxDiffPercent: 10 },
+      });
+
+      expect(results[0].status).toBe('passed');
+      expect(results[0].autoPassed).toBe('threshold');
+      expect(results[0].diffPercent).toBeGreaterThan(0);
+    });
+
+    it('passes within maxDiffPixels', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({
+        projectRoot: tmpDir,
+        reportDir,
+        threshold: 0.1,
+        passCriteria: { maxDiffPixels: 9 },
+      });
+
+      expect(results[0].status).toBe('passed');
+      expect(results[0].autoPassed).toBe('threshold');
+    });
+
+    it('stays changed above maxDiffPercent', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({
+        projectRoot: tmpDir,
+        reportDir,
+        threshold: 0.1,
+        passCriteria: { maxDiffPercent: 0.5 },
+      });
+
+      expect(results[0].status).toBe('changed');
+    });
+
+    it('treats byte-different but visually identical images as passed', () => {
+      // Color delta far below the per-pixel threshold: bytes differ, no pixel flagged
+      store.write('page', baselinePng());
+      store.writeTemp('page', makePng(10, 10, [121, 120, 120]));
+
+      const results = compareAll({ projectRoot: tmpDir, reportDir, threshold: 0.1 });
+
+      expect(results[0].status).toBe('passed');
+      expect(results[0].diffPercent).toBe(0);
+      expect(results[0].autoPassed).toBeUndefined();
+    });
+
+    describe('noiseAutoPass', () => {
+      const DOM = '<html><body><p>stable</p></body></html>';
+
+      it('auto-passes DOM-identical small diffs when enabled', () => {
+        store.write('page', baselinePng(), undefined, DOM);
+        store.writeTemp('page', blockOff(), DOM);
+
+        const results = compareAll({
+          projectRoot: tmpDir,
+          reportDir,
+          threshold: 0.1,
+          passCriteria: { noiseAutoPass: true, noiseMaxDiffPercent: 10 },
+        });
+
+        expect(results[0].status).toBe('passed');
+        expect(results[0].autoPassed).toBe('noise');
+        expect(results[0].dom?.noiseHint).toBe(true);
+      });
+
+      it('does not auto-pass when the DOM changed', () => {
+        store.write('page', baselinePng(), undefined, DOM);
+        store.writeTemp('page', blockOff(), '<html><body><p>edited</p><span>new</span></body></html>');
+
+        const results = compareAll({
+          projectRoot: tmpDir,
+          reportDir,
+          threshold: 0.1,
+          passCriteria: { noiseAutoPass: true, noiseMaxDiffPercent: 10 },
+        });
+
+        expect(results[0].status).toBe('changed');
+      });
+
+      it('does not auto-pass above noiseMaxDiffPercent', () => {
+        store.write('page', baselinePng(), undefined, DOM);
+        store.writeTemp('page', blockOff(), DOM);
+
+        const results = compareAll({
+          projectRoot: tmpDir,
+          reportDir,
+          threshold: 0.1,
+          passCriteria: { noiseAutoPass: true, noiseMaxDiffPercent: 0.5 },
+        });
+
+        expect(results[0].status).toBe('changed');
+      });
+    });
+
+    it('generateReport reads pass criteria from .testivai/config.json', () => {
+      fs.mkdirSync(path.join(tmpDir, '.testivai'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, '.testivai', 'config.json'),
+        JSON.stringify({ mode: 'local', threshold: 0.1, maxDiffPercent: 10 }),
+      );
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const report = generateReport({
+        projectRoot: tmpDir,
+        reportDir: 'visual-report',
+        autoOpen: false,
+      });
+
+      expect(report.summary.passed).toBe(1);
+      expect(report.summary.changed).toBe(0);
+      expect(report.snapshots[0].autoPassed).toBe('threshold');
+    });
+  });
 });

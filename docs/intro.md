@@ -45,6 +45,19 @@ Create `.testivai/config.json` at your project root:
 
 This tells the reporter to compare locally and write an HTML report instead of uploading to the cloud. **No API key required.**
 
+Optional tolerance and capture settings (all have safe defaults):
+
+| Field | Default | What it does |
+|---|---|---|
+| `maxDiffPercent` | `0` | Diffs at or below this percentage report as **passed** — your team's tolerance dial |
+| `maxDiffPixels` | unset | Absolute variant: pass when changed-pixel count is at or below this |
+| `noiseAutoPass` | `false` | Auto-pass diffs whose DOM is structurally identical (the noise hint), up to `noiseMaxDiffPercent` |
+| `noiseMaxDiffPercent` | `1` | Upper bound (diff %) for `noiseAutoPass` |
+| `stabilize` | `true` | Freeze animations/transitions, hide the caret, and wait for web fonts before every capture |
+| `ignoreSelectors` | `[]` | Elements hidden (`visibility: hidden`) during capture — timestamps, ads, live widgets |
+
+Auto-passed snapshots keep their diff image and are labeled in the report and in `results.json` (`autoPassed: "threshold" | "noise"`), so tolerance never hides information — it just stops demanding review for changes you've declared acceptable.
+
 ### 3. Add the reporter
 
 In `playwright.config.ts`:

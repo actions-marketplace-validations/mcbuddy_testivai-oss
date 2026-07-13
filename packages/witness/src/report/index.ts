@@ -5,7 +5,7 @@
 export { generateReport } from './generator';
 export type { GenerateReportOptions } from './generator';
 export { compareAll } from './compare';
-export type { CompareOptions } from './compare';
+export type { CompareOptions, PassCriteria } from './compare';
 export { renderHtml } from './template';
 export type {
   ReportData,

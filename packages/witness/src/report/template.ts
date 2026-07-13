@@ -231,7 +231,7 @@ function renderSnapshot(snapshot: SnapshotResult): string {
         <span class="snapshot-name">${escapeHtml(snapshot.name)}</span>
         <span class="snapshot-badge ${badgeClass}">${snapshot.status}</span>
       </div>
-      ${snapshot.status === 'changed' ? `<div class="snapshot-stats">Diff: ${snapshot.diffPercent.toFixed(2)}% (${snapshot.diffCount} pixels)</div>` : ''}
+      ${snapshot.status === 'changed' || snapshot.autoPassed ? `<div class="snapshot-stats">Diff: ${snapshot.diffPercent.toFixed(2)}% (${snapshot.diffCount} pixels)${snapshot.autoPassed ? ` — auto-passed: ${snapshot.autoPassed === 'noise' ? 'DOM unchanged, within noise tolerance' : 'within configured diff tolerance'}` : ''}</div>` : ''}
       ${renderDomHint(snapshot)}
       <div class="${gridClass}">
         ${hasBaseline ? `<div class="diff-col"><label>Baseline</label><img src="${snapshot.baselinePath}" alt="Baseline"></div>` : ''}

@@ -18,29 +18,29 @@ must too. Plan: `baselines/<name>/<project-or-browser>-<WxH>/`, with
 migration for existing single-variant layouts. This also unblocks
 cross-browser and responsive testing (see 3.2, 3.3).
 
-### 1.2 Capture stabilization defaults — **S**, biggest flake killer
-The #1 and #2 causes of visual-test flakiness are animations/dynamic motion
-and font loading. Playwright's screenshot API already has the tools; we
-don't use them yet. Defaults to add (each overridable):
-- `animations: 'disabled'` on every capture
-- `caret: 'hide'`
-- wait for `document.fonts.ready` before capture
-- optional `waitForStable` (two identical consecutive frames) for stubborn pages
+### 1.2 Capture stabilization defaults — ✅ SHIPPED
+Both adapters now freeze CSS animations/transitions, hide the caret, force
+instant scrolling, and wait (bounded 3s) for web fonts before every capture —
+on by default, off via `stabilize: false` (config.json, project config, or
+per call). Still open from the original plan:
+- optional `waitForStable` (two identical consecutive frames) for stubborn pages — **S** 🤝
 
-### 1.3 Pass criteria that match human intuition — **S/M**
-Today any nonzero pixel diff marks a snapshot `changed` — a 0.01% render
-jitter shows the same status as a broken layout. Add:
-- `maxDiffPercent` (per-project and per-snapshot): below it → `passed`
-- `maxDiffPixels` absolute variant
-- opt-in `noiseAutoPass`: DOM identical + diff below a bound → `passed`
-  with a note in the report (the noise hint graduating from label to decision)
+### 1.3 Pass criteria that match human intuition — ✅ SHIPPED (project-level)
+`.testivai/config.json` now supports `maxDiffPercent`, `maxDiffPixels`, and
+opt-in `noiseAutoPass` + `noiseMaxDiffPercent`. Auto-passed snapshots keep
+their diff image and are labeled in the report and `results.json`
+(`autoPassed`). Byte-different but visually identical captures now pass
+instead of reading `changed 0.01%`. Still open:
+- per-snapshot tolerance override via `witness()` options (needs metadata
+  plumbing from capture to compare) — **M**
 
 ## 2. Workflow completeness
 
 ### 2.1 Locator masking parity — **S**
 `ignoreSelectors` (CSS `visibility:hidden`, layout-preserving) is our
-mechanism; Playwright users also expect `mask: [locator]` per call. Accept
-locators/selectors in the `witness()` options and translate.
+mechanism — now supported in **both** adapters (WebdriverIO gained global +
+per-call support alongside stabilization). Playwright users also expect
+`mask: [locator]` per call; accept locators in `witness()` options and translate.
 
 ### 2.2 Element-level snapshots — **M**
 `witness(page.locator('.card'), ...)` for component-scoped baselines.

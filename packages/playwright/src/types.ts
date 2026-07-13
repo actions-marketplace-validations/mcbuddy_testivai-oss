@@ -206,6 +206,8 @@ export interface TestivAIProjectConfig {
   structure?: StructureAnalysisConfig;
   /** Environment-specific overrides (optional) */
   environments?: EnvironmentConfig;
+  /** Stabilize captures (disable animations, hide caret, wait for fonts). Default: true. */
+  stabilize?: boolean;
 }
 
 /**
@@ -239,6 +241,15 @@ export interface TestivAIConfig {
    * Example: ["[data-testivai-ignore]", ".version-badge", "#live-chat-widget"]
    */
   ignoreSelectors?: string[];
+  /**
+   * Stabilize the page before capture: disable CSS animations/transitions,
+   * hide the text caret, and wait for web fonts to finish loading — the top
+   * causes of flaky visual diffs. Default: true.
+   *
+   * Can also be set globally in `.testivai/config.json` under `stabilize`
+   * or in `testivai.config.ts`. Per-snapshot values win.
+   */
+  stabilize?: boolean;
 }
 
 /**

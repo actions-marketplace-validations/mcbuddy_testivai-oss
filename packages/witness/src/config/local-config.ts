@@ -30,6 +30,37 @@ export interface LocalConfig {
    * Example: ["[data-testivai-ignore]", ".version-badge", "#live-chat"]
    */
   ignoreSelectors?: string[];
+  /**
+   * Pass tolerance: snapshots whose diff percentage (0-100) is at or below
+   * this value are reported as passed instead of changed. Default: 0 —
+   * only pixel-identical (after `threshold`) runs pass.
+   */
+  maxDiffPercent: number;
+  /**
+   * Absolute variant of the pass tolerance: pass when the number of changed
+   * pixels is at or below this count. Unset by default. When both this and
+   * maxDiffPercent are set, satisfying either one passes.
+   */
+  maxDiffPixels?: number;
+  /**
+   * Auto-pass render noise: when true, a snapshot whose pixels differ but
+   * whose DOM is structurally identical (the noise hint) is reported as
+   * passed — provided its diff percentage is at or below
+   * noiseMaxDiffPercent. Auto-passed snapshots keep their diff image and
+   * are labeled in the report. Default: false (hint stays a label).
+   */
+  noiseAutoPass: boolean;
+  /**
+   * Upper bound (diff %, 0-100) for noiseAutoPass. A DOM-identical diff
+   * larger than this still shows as changed. Default: 1.
+   */
+  noiseMaxDiffPercent: number;
+  /**
+   * Stabilize captures: adapters disable CSS animations/transitions, hide
+   * the caret, and wait for web fonts before taking the screenshot.
+   * Default: true.
+   */
+  stabilize: boolean;
 }
 
 const DEFAULT_CONFIG: LocalConfig = {
@@ -37,6 +68,10 @@ const DEFAULT_CONFIG: LocalConfig = {
   threshold: 0.1,
   autoOpen: true,
   failOnDiff: false,
+  maxDiffPercent: 0,
+  noiseAutoPass: false,
+  noiseMaxDiffPercent: 1,
+  stabilize: true,
 };
 
 const CONFIG_FILENAME = 'config.json';

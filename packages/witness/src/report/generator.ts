@@ -8,9 +8,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
-import { compareAll, CompareOptions } from './compare';
+import { compareAll, CompareOptions, PassCriteria } from './compare';
 import { ReportData, ReportSummary } from './results';
 import { renderHtml } from './template';
+import { loadLocalConfig } from '../config/local-config';
 
 export interface GenerateReportOptions {
   projectRoot: string;
@@ -22,6 +23,13 @@ export interface GenerateReportOptions {
   autoOpen?: boolean;
   /** SDK version string for the report header */
   version?: string;
+  /**
+   * Pass criteria overrides. When omitted, values are read from
+   * `.testivai/config.json` (maxDiffPercent, maxDiffPixels, noiseAutoPass,
+   * noiseMaxDiffPercent) so every adapter honors the project's tolerances
+   * without extra wiring.
+   */
+  passCriteria?: PassCriteria;
 }
 
 /**
@@ -51,11 +59,20 @@ export function generateReport(options: GenerateReportOptions): ReportData {
   // Ensure report directory exists
   fs.mkdirSync(reportDir, { recursive: true });
 
-  // 1. Compare all snapshots
+  // 1. Compare all snapshots. Pass criteria default to the project's
+  // .testivai/config.json so tolerances follow the config file everywhere.
+  const localConfig = loadLocalConfig(projectRoot);
+  const passCriteria: PassCriteria = options.passCriteria ?? {
+    maxDiffPercent: localConfig.maxDiffPercent,
+    maxDiffPixels: localConfig.maxDiffPixels,
+    noiseAutoPass: localConfig.noiseAutoPass,
+    noiseMaxDiffPercent: localConfig.noiseMaxDiffPercent,
+  };
   const compareOptions: CompareOptions = {
     projectRoot,
     reportDir,
     threshold,
+    passCriteria,
   };
   const snapshots = compareAll(compareOptions);
 

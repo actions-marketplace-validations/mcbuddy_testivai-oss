@@ -32,6 +32,20 @@ export interface WitnessOptions {
    * known to be expensive or unstable.
    */
   skipDom?: boolean;
+  /**
+   * CSS selectors for elements to hide (`visibility: hidden`) for the
+   * duration of the capture, so dynamic content (timestamps, ads, live
+   * widgets) never contributes to the pixel diff. Merged with the global
+   * `ignoreSelectors` list from `.testivai/config.json`.
+   */
+  ignoreSelectors?: string[];
+  /**
+   * Stabilize the page before capture: disable CSS animations/transitions,
+   * hide the text caret, and wait for web fonts to finish loading — the top
+   * causes of flaky visual diffs. Default: true (also configurable globally
+   * via `stabilize` in `.testivai/config.json`; this per-call value wins).
+   */
+  stabilize?: boolean;
 }
 
 /**

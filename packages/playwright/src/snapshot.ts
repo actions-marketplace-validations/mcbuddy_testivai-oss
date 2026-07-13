@@ -6,6 +6,7 @@ import sharp from 'sharp';
 import { SnapshotPayload, LayoutData, TestivAIConfig, StructureAnalysis, StructureAnalysisConfig } from './types';
 import { loadConfig, mergeTestConfig } from './config/loader';
 import { collectIgnoreSelectors, buildIgnoreSelectorsCSS } from './config/ignore-selectors';
+import { STABILIZE_CSS, resolveStabilize, waitForFonts } from './config/stabilize';
 
 /**
  * Generates a safe filename from a URL.
@@ -84,6 +85,20 @@ export async function snapshot(
     if (css) {
       ignoreStyleEl = await page.addStyleTag({ content: css });
     }
+  }
+
+  // Stabilize the page before capture (all modes): freeze CSS animations and
+  // transitions, hide the caret, and wait for web fonts — the top sources of
+  // flaky pixel diffs. Injected as CSS so every capture path (native
+  // screenshot, CDP captureScreenshot, scroll-and-stitch) is covered.
+  let stabilizeStyleEl: import('@playwright/test').ElementHandle | null = null;
+  if (resolveStabilize(process.cwd(), projectConfig, config)) {
+    try {
+      stabilizeStyleEl = await page.addStyleTag({ content: STABILIZE_CSS });
+    } catch {
+      // Style injection can fail on locked-down pages; capture proceeds
+    }
+    await waitForFonts(page);
   }
 
   // Check if scroll-and-stitch is explicitly requested (backup method)
@@ -337,6 +352,12 @@ export async function snapshot(
   if (ignoreStyleEl) {
     await ignoreStyleEl.evaluate((el: Element) => el.remove()).catch(() => {});
     ignoreStyleEl = null;
+  }
+
+  // Re-enable animations/transitions after capture
+  if (stabilizeStyleEl) {
+    await stabilizeStyleEl.evaluate((el: Element) => el.remove()).catch(() => {});
+    stabilizeStyleEl = null;
   }
 
   // 1.5. Local mode: also place the screenshot in the layout expected by

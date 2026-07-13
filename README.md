@@ -79,7 +79,11 @@ npx playwright install chromium
 // File: .testivai/config.json
 {
   "mode": "local",
-  "threshold": 0.1,
+  "threshold": 0.1,            // per-pixel color sensitivity (0-1)
+  "maxDiffPercent": 0,         // pass diffs at or below this % (your tolerance dial)
+  "noiseAutoPass": false,      // true: DOM-identical diffs within noiseMaxDiffPercent pass
+  "stabilize": true,           // freeze animations, hide caret, wait for fonts
+  "ignoreSelectors": [],       // e.g. [".live-chat", "[data-testid=clock]"]
   "reportDir": "visual-report",
   "autoOpen": false
 }
@@ -119,7 +123,10 @@ npx playwright test
 ## What you get out of the box (free, no account)
 
 - ✅ Full-page screenshot capture via Playwright
+- ✅ **Stabilized captures by default** — animations/transitions frozen, caret hidden, web fonts awaited (the top causes of flaky visual tests, neutralized before every screenshot)
 - ✅ Local pixel diff with configurable threshold
+- ✅ **Tunable pass criteria** — `maxDiffPercent` / `maxDiffPixels` tolerances, plus opt-in `noiseAutoPass` so DOM-identical render noise stops demanding review
+- ✅ `ignoreSelectors` for dynamic content (both adapters, global or per-snapshot)
 - ✅ Self-contained HTML report (`visual-report/index.html`)
 - ✅ Machine-readable results (`visual-report/results.json`)
 - ✅ Committed baselines under `.testivai/baselines/` (just `git add` them)

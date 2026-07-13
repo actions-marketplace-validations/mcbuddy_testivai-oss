@@ -5,15 +5,23 @@ title: OSS vs Cloud
 
 # OSS vs Cloud — capability matrix
 
-TestivAI ships in two lanes that share the same SDK install. Both lanes are usable today; cloud is opt-in and never required.
+**TestivAI is one product with an open-source core.** Everything needed to
+capture, diff, decide, and approve — the `@testivai/*` packages in this repo —
+is MIT-licensed and runs fully local. The cloud lane is not a separate
+version: it is a paid feature layer on top of this same core (hosted history,
+team approvals, deeper analysis), enabled by adding an API key to the same
+install.
 
-| Capability | OSS (this repo) | Cloud (paid) |
+| Capability | OSS core (this repo) | Cloud (paid layer) |
 |---|---|---|
 | **Frameworks (1.0)** | Playwright ✅<br/>WebdriverIO ✅<br/>others via `testivai run` (experimental) | Playwright + 11 frameworks fully supported |
 | **Frameworks (iter 2)** | + Cypress ✅<br/>+ Puppeteer ✅ | (same) |
 | Capture full-page screenshots | ✅ | ✅ |
+| **Stabilized captures** — animations frozen, caret hidden, fonts awaited | ✅ (default) | ✅ |
 | Local pixel diff with threshold | ✅ | ✅ |
-| Ignore regions | ✅ | ✅ |
+| **Tunable pass criteria** — `maxDiffPercent`, `maxDiffPixels` | ✅ | ✅ |
+| **Noise auto-pass** — DOM-identical diffs within tolerance pass (`noiseAutoPass`) | ✅ | ✅ |
+| Ignore regions (`ignoreSelectors`, both adapters) | ✅ | ✅ |
 | **DOM tree diff (noise hint)** | ✅ | ✅ |
 | Self-contained HTML report (`visual-report/index.html`) | ✅ | ✅ |
 | Machine-readable results (`results.json`) | ✅ | ✅ |
