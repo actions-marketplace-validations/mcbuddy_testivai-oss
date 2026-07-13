@@ -36,6 +36,15 @@ instead of reading `changed 0.01%`. Still open:
 
 ## 2. Workflow completeness
 
+### 2.0 Zero-test-suite mode — ✅ SHIPPED
+`testivai witness <url>` captures a running app with no test framework:
+same-origin crawl or explicit `--pages`, launches its own headless Chrome,
+full stabilization + ignoreSelectors parity, standard pipeline downstream
+(baselines, tolerances, report, PR approvals). Built for AI-generated and
+vibe-coded apps (Lovable, Bolt, v0) that ship without tests. Still open:
+- viewport matrix per page (blocked on baseline keying, 1.1)
+- `waitForStable` frame-compare for JS-animated pages 🤝
+
 ### 2.1 Locator masking parity — **S**
 `ignoreSelectors` (CSS `visibility:hidden`, layout-preserving) is our
 mechanism — now supported in **both** adapters (WebdriverIO gained global +

@@ -66,6 +66,20 @@ Plus:
 - [`docs/`](./docs) — public documentation
 - [`e2e/`](./e2e) — OSS smoke E2E test suite
 
+## No test suite? One command.
+
+AI-built and vibe-coded apps (Lovable, Bolt, v0, ...) usually ship with zero
+tests. You still get the full safety net:
+
+```bash
+npx testivai witness http://localhost:3000
+```
+
+TestivAI launches a headless Chrome, discovers your pages (or takes
+`--pages "/,/pricing"`), and captures each one — baselines, diffs, noise
+hints, HTML report, and PR approvals all work exactly as below, no test
+framework required. See the [vibe-coded apps guide](./docs/guides/vibe-coded-apps.md).
+
 ## Quick Start (Playwright, Local Mode)
 
 ```bash

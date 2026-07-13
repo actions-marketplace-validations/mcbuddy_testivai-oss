@@ -61,6 +61,17 @@ export interface LocalConfig {
    * Default: true.
    */
   stabilize: boolean;
+  /**
+   * Standalone mode (`testivai witness <url>`): explicit page paths to
+   * capture, resolved against the start URL (e.g. ["/", "/pricing"]).
+   * When set, link crawling is skipped. Unset = crawl same-origin links
+   * from the start page.
+   */
+  pages?: string[];
+  /** Standalone mode: crawl cap when discovering links. Default: 10. */
+  maxPages?: number;
+  /** Standalone mode: capture viewport. Default: 1280x800. */
+  viewport?: { width: number; height: number };
 }
 
 const DEFAULT_CONFIG: LocalConfig = {
