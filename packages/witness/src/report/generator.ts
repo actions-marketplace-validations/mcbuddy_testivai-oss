@@ -49,7 +49,7 @@ export function generateReport(options: GenerateReportOptions): ReportData {
     reportDir: reportDirRelative = 'visual-report',
     threshold = 0.1,
     autoOpen = true,
-    version = '2.0.0',
+    version = '2.1.0',
   } = options;
 
   const reportDir = path.isAbsolute(reportDirRelative)

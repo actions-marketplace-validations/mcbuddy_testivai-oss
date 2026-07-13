@@ -89,11 +89,14 @@ import { snapshot } from '@testivai/witness-playwright';
 // Basic usage
 await snapshot(page, testInfo, 'my-snapshot');
 
-// With custom config
+// With per-snapshot overrides
 await snapshot(page, testInfo, 'checkout-page', {
-  threshold: 0.05,  // 5% difference tolerance
-  fullPage: true,   // Capture full page
+  ignoreSelectors: ['.live-chat', '[data-testid=clock]'], // hidden for this capture
+  stabilize: false, // opt out of animation-freeze + font-wait for this snapshot
 });
+
+// Diff tolerances (maxDiffPercent, noiseAutoPass, ...) are project-level:
+// set them in .testivai/config.json — see the repository README.
 ```
 
 ## CI/CD Integration

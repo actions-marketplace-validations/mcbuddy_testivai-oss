@@ -30,7 +30,7 @@ TestivAI integrates with your existing test framework via a single function call
 
 Three things happen per test that calls `witness(...)`:
 
-1. **Capture** — the SDK takes a full-page screenshot via the test framework's native screenshot API and writes it to `.testivai/temp/<name>/screenshot.png`.
+1. **Capture** — the SDK stabilizes the page (CSS animations/transitions frozen, caret hidden, web fonts awaited — disable with `stabilize: false`), then takes a full-page screenshot via the test framework's native screenshot API and writes it to `.testivai/temp/<name>/screenshot.png`.
 2. **Diff** — at the end of the run, the reporter (or `testivai run` for non-Playwright frameworks) compares each temp capture against `.testivai/baselines/<name>/screenshot.png`.
 3. **Report** — a self-contained `visual-report/index.html` is generated with a summary table, side-by-side images, and a `results.json` for CI consumption.
 
@@ -81,11 +81,15 @@ The threshold is configurable:
 {
   "mode": "local",
   "threshold": 0.1,
-  "reportDir": "visual-report"
+  "reportDir": "visual-report",
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
-A `threshold` of `0.1` (10%) means small below-threshold drift still flags as `changed`; you decide whether to approve or investigate.
+`threshold` controls per-pixel color sensitivity. The **pass criteria** decide what happens when pixels do differ: diffs within `maxDiffPercent` / `maxDiffPixels` report as passed, and with `noiseAutoPass` enabled, DOM-identical diffs (the noise hint) within `noiseMaxDiffPercent` pass too. Auto-passed snapshots keep their diff image and carry `autoPassed: "threshold" | "noise"` in `results.json`, so tolerance never hides information.
 
 ---
 
@@ -108,7 +112,7 @@ visual-report/
 
 ```json
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "timestamp": "2026-04-30T...",
   "summary": { "total": 2, "passed": 0, "changed": 2, "newSnapshots": 0 },
   "snapshots": [
@@ -121,6 +125,12 @@ visual-report/
         "noiseHint": false,
         "summary": { "added": 2, "removed": 1, "attributeChanges": 0 }
       }
+    },
+    {
+      "name": "hero",
+      "status": "passed",
+      "diffPercent": 0.3,
+      "autoPassed": "noise"
     }
   ]
 }

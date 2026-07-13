@@ -38,7 +38,11 @@ Create `.testivai/config.json` at your project root:
   "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
-  "autoOpen": false
+  "autoOpen": false,
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
@@ -132,6 +136,13 @@ To skip DOM capture for a single snapshot (rare — useful only when DOM seriali
 
 ```ts
 await testivai.witness(browser, 'heavy-page', { skipDom: true });
+
+// Hide dynamic elements for this snapshot only (merged with the global
+// ignoreSelectors list from .testivai/config.json)
+await testivai.witness(browser, 'dashboard', { ignoreSelectors: ['.live-feed'] });
+
+// Opt out of capture stabilization (animations frozen, fonts awaited) per call
+await testivai.witness(browser, 'animation-demo', { stabilize: false });
 ```
 
 ---

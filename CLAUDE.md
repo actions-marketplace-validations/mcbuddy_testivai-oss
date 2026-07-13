@@ -69,12 +69,14 @@ CI (GitHub Actions):
 - `src/baselines/store.ts`   — BaselineStore: read/write/approve/undo baselines and temp
 - `src/diff/diff.ts`         — pixel comparison (pixelmatch-based)
 - `src/diff/dom-diff.ts`     — zero-dep DOM tokenizer + multiset comparator; emits noiseHint
-- `src/report/compare.ts`    — orchestrates diff, writes images to visual-report/images/
+- `src/config/local-config.ts` — LocalConfig type + defaults (single source of truth for config.json fields)
+- `src/report/compare.ts`    — orchestrates diff, writes images to visual-report/images/, applies pass criteria (maxDiffPercent/maxDiffPixels/noiseAutoPass → status passed + autoPassed marker)
 - `src/report/generator.ts`  — writes results.json + renders index.html
 - `src/report/template.ts`   — HTML template for the report
 
 ### @testivai/witness-playwright (`packages/playwright/`)
-- `src/snapshot.ts`          — `testivai.witness()` entry point
+- `src/snapshot.ts`          — `testivai.witness()` entry point (stabilizes page, applies ignoreSelectors, captures)
+- `src/config/stabilize.ts`  — capture stabilization CSS + resolution (per-call > project > config.json > default true)
 - `src/reporter.ts`          — Playwright reporter (reads config, calls compare, generates report)
 
 ### GitHub Action reporter (`action/`)
@@ -82,7 +84,7 @@ CI (GitHub Actions):
 - `src/comment.ts`           — builds PR comment markdown (with DOM noise hint)
 - `src/status.ts`            — determines pass/fail commit status
 - `src/types.ts`             — shared TypeScript interfaces
-- `dist/index.js`            — bundled output (ncc); **must be committed**; rebuild with `npm run build` inside `action/`
+- `dist/index.js`            — bundled output (esbuild); **must be committed**; rebuild with `npm run build` inside `action/`
 
 ### GitHub Action approver (`approve/`)
 - `action.yml`               — composite action; no build step needed (pure shell + github-script)
@@ -108,7 +110,9 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
 
 ```
 .testivai/
-  config.json                          — { mode, threshold, reportDir, autoOpen }
+  config.json                          — { mode, threshold, reportDir, autoOpen,
+                                           maxDiffPercent, maxDiffPixels, noiseAutoPass,
+                                           noiseMaxDiffPercent, stabilize, ignoreSelectors }
   baselines/
     <snapshot-name>/
       screenshot.png                   — committed reference screenshot
@@ -127,7 +131,7 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
 
 ```json
 {
-  "version": "2.0.0",
+  "version": "2.1.0",
   "timestamp": "<ISO>",
   "summary": { "total": 3, "passed": 0, "changed": 3, "newSnapshots": 0 },
   "snapshots": [
@@ -142,7 +146,9 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
         "changed":   false,
         "noiseHint": true,
         "summary":   null
-      }
+      },
+      "autoPassed": "noise"   // optional; "threshold" | "noise" when a pass
+                              // criterion turned a pixel diff into status passed
     }
   ]
 }

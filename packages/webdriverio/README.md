@@ -27,7 +27,11 @@ Create `.testivai/config.json` at your project root:
   "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
-  "autoOpen": false
+  "autoOpen": false,
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
@@ -113,6 +117,8 @@ Captures a screenshot + DOM and writes them as a temp snapshot.
 | `browser` | WebdriverIO browser | Must expose `takeScreenshot()` and (for DOM) `execute()`. |
 | `name` | string | Snapshot name. Becomes `.testivai/temp/<name>/` and the key in the report. |
 | `options.skipDom` | boolean | Skip DOM capture for this snapshot. |
+| `options.ignoreSelectors` | string[] | Elements hidden (`visibility: hidden`) for this capture; merged with the global `ignoreSelectors` from `.testivai/config.json`. |
+| `options.stabilize` | boolean | Override capture stabilization (animations frozen, caret hidden, fonts awaited). Default: `true` (or the global `stabilize` setting). |
 
 ### `TestivaiService`
 

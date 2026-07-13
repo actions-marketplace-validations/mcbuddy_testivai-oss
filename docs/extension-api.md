@@ -72,7 +72,13 @@ That's the entire contract for capture. After the test run, the user invokes `np
   "reportDir": "visual-report",
   "autoOpen": false,          // open report in a browser after generation
   "failOnDiff": false,        // exit non-zero from `testivai compare` when diffs exist
-  "baselinesDir": ".testivai/baselines"  // override baseline storage
+  "baselinesDir": ".testivai/baselines",  // override baseline storage
+  "maxDiffPercent": 0,        // pass diffs at or below this % (autoPassed: "threshold")
+  "maxDiffPixels": 100,       // absolute variant; either criterion passing suffices
+  "noiseAutoPass": false,     // auto-pass DOM-identical diffs (autoPassed: "noise")
+  "noiseMaxDiffPercent": 1,   // upper bound (diff %) for noiseAutoPass
+  "stabilize": true,          // freeze animations, hide caret, await fonts pre-capture
+  "ignoreSelectors": []       // elements hidden (visibility:hidden) during capture
 }
 ```
 
@@ -116,7 +122,10 @@ Written by `generateReport()` to `<reportDir>/results.json`. Consumed by the Git
         "changed": false,
         "summary": null,
         "noiseHint": true
-      }
+      },
+      "autoPassed": "noise"   // present only when a pass criterion applied:
+                              // "threshold" (maxDiffPercent/maxDiffPixels) or
+                              // "noise" (noiseAutoPass); status is then "passed"
     },
     {
       "name": "nav-redesign",

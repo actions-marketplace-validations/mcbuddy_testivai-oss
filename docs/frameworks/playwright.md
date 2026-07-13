@@ -48,11 +48,22 @@ Create `.testivai/config.json` at your project root:
   "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
-  "autoOpen": false
+  "autoOpen": false,
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
 The reporter detects this file and switches to local mode automatically. **Skip to step 3.**
+
+Tolerance & capture settings (all optional — full reference in [Getting Started](../intro.md)):
+
+- `maxDiffPercent` / `maxDiffPixels` — diffs within these bounds report as **passed** (labeled `autoPassed` in the report and `results.json`)
+- `noiseAutoPass` + `noiseMaxDiffPercent` — auto-pass DOM-identical diffs (the noise hint) within the bound
+- `stabilize` (default `true`) — before every capture: animations/transitions frozen, caret hidden, web fonts awaited — the top causes of flaky visual diffs, neutralized by default
+- `ignoreSelectors` — elements hidden (`visibility: hidden`) during capture
 
 ### Mode B — Cloud mode (optional, hosted)
 
@@ -118,7 +129,7 @@ export default defineConfig({
 
 ## 4. Add Capture Calls
 
-Import `testivai` from the SDK and call `testivai.witness(page, testInfo, 'name')` in your tests:
+Import `testivai` from the SDK and call `testivai.witness(page, testInfo, 'name')` in your tests. An optional fourth argument takes per-snapshot overrides, e.g. `{ ignoreSelectors: ['.live-widget'], stabilize: false }`:
 
 ```ts
 import { test } from '@playwright/test';
