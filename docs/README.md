@@ -33,6 +33,8 @@ Pick the framework you use:
 
 ## Guides
 
+- **[AI agents & code assistants](./guides/ai-agents.md)**
+- **[Vibe-coded apps (Lovable, Bolt, v0)](./guides/vibe-coded-apps.md)**
 - **[CI/CD](./guides/ci-cd.md)**
 - **[GitHub Integration](./guides/github-integration.md)**
 - **[Headless](./guides/headless.md)**

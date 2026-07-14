@@ -35,7 +35,7 @@ If an AI agent (Claude Code, Cursor, Copilot, …) writes your UI code, someone 
 - **Noise-aware verdicts** — the DOM hint tells the agent whether a pixel diff is *likely render noise* or a *real structural change* (`2 added, 1 removed`), so it doesn't chase anti-aliasing ghosts.
 - **Human approval stays in the PR** — the agent iterates locally; you approve baselines with one `/testivai approve` comment.
 
-Paste this into your project's `AGENTS.md` / `CLAUDE.md` to wire it up:
+Paste this into your project's `AGENTS.md` / `CLAUDE.md` to wire it up (full guide with MCP setup, a real agent transcript, and the approval rule: [docs/guides/ai-agents.md](./docs/guides/ai-agents.md)):
 
 ```markdown
 ## Visual verification

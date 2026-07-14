@@ -117,4 +117,5 @@ needed. If you use a custom runner, set `TESTIVAI_CHROME_PATH` or run
 - **Agents can read the results**: `visual-report/results.json` is
   machine-readable, and the [`@testivai/mcp`](../../packages/mcp) server
   lets Claude Code or Cursor see the diffs directly — so the same agent
-  that changed your app can check its own work.
+  that changed your app can check its own work. Full setup:
+  [AI agents guide](./ai-agents.md).
