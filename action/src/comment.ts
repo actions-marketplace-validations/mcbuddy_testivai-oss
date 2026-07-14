@@ -3,8 +3,23 @@
  */
 
 import { ResultsData, SnapshotResult } from './types';
+import { STATUS_CONTEXT } from './status';
 
-const UPSERT_MARKER = '<!-- testivai-visual-report -->';
+export const UPSERT_MARKER = '<!-- testivai-visual-report -->';
+
+/**
+ * Resolve the PR comment upsert marker for a status context. The default
+ * context keeps the legacy bare marker so comments on existing PRs keep
+ * being updated in place; custom contexts get a namespaced marker so
+ * multiple visual lanes in one repo don't overwrite each other's comments.
+ * The context is sanitized because '--' or '>' inside an HTML comment
+ * would terminate the marker early.
+ */
+export function resolveUpsertMarker(statusContext: string): string {
+  if (statusContext === STATUS_CONTEXT) return UPSERT_MARKER;
+  const safe = statusContext.replace(/-{2,}/g, '-').replace(/[<>]/g, '');
+  return `<!-- testivai-visual-report:${safe} -->`;
+}
 
 /**
  * Format the diff percentage for a snapshot, accepting both the new
@@ -44,10 +59,13 @@ function renderDomHintMarkdown(snapshot: SnapshotResult): string {
  * @param results      Parsed results.json
  * @param artifactUrl  Optional link to the workflow run where the
  *                     visual report artifact can be downloaded.
+ * @param marker       Upsert marker identifying this lane's comment
+ *                     (from resolveUpsertMarker).
  */
 export function buildComment(
   results: ResultsData,
   artifactUrl?: string,
+  marker: string = UPSERT_MARKER,
 ): string {
   const { summary, snapshots } = results;
 
@@ -62,7 +80,7 @@ export function buildComment(
     `${newEmoji} **${summary.newSnapshots} new**`,
   ].join(' · ');
 
-  let comment = `${UPSERT_MARKER}
+  let comment = `${marker}
 
 ### 🔍 TestivAI Visual Report
 
@@ -118,12 +136,15 @@ ${domHint}
 /**
  * Build simple message for empty results
  */
-export function buildEmptyComment(artifactUrl?: string): string {
+export function buildEmptyComment(
+  artifactUrl?: string,
+  marker: string = UPSERT_MARKER,
+): string {
   const link = artifactUrl
     ? `\n> 📦 [Download visual report ZIP](${artifactUrl})\n`
     : '';
 
-  return `${UPSERT_MARKER}
+  return `${marker}
 
 ### 🔍 TestivAI Visual Report
 

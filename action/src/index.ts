@@ -7,8 +7,8 @@ import * as github from '@actions/github';
 import * as artifact from '@actions/artifact';
 import * as fs from 'fs';
 import * as path from 'path';
-import { buildComment, buildEmptyComment } from './comment';
-import { determineStatus, STATUS_CONTEXT } from './status';
+import { buildComment, buildEmptyComment, resolveUpsertMarker } from './comment';
+import { determineStatus, resolveStatusContext } from './status';
 import { ResultsData } from './types';
 
 /**
@@ -31,6 +31,8 @@ async function run(): Promise<void> {
     const uploadArtifact = core.getBooleanInput('upload-artifact');
     const artifactRetentionDays = parseInt(core.getInput('artifact-retention-days'), 10);
     const artifactName = core.getInput('artifact-name') || 'testivai-visual-report';
+    const statusContext = resolveStatusContext(core.getInput('status-context'));
+    const upsertMarker = resolveUpsertMarker(statusContext);
 
     core.info(`Reading results from ${reportDir}...`);
 
@@ -113,12 +115,12 @@ async function run(): Promise<void> {
 
       // Build comment — includes artifact link when available
       const commentBody = results.snapshots.length === 0
-        ? buildEmptyComment(artifactUrl)
-        : buildComment(results, artifactUrl);
+        ? buildEmptyComment(artifactUrl, upsertMarker)
+        : buildComment(results, artifactUrl, upsertMarker);
 
-      // Look for existing comment to upsert
+      // Look for this lane's existing comment to upsert
       const existingComment = comments.find(c =>
-        c.body?.includes('<!-- testivai-visual-report -->')
+        c.body?.includes(upsertMarker)
       );
 
       if (existingComment) {
@@ -151,7 +153,7 @@ async function run(): Promise<void> {
       repo: context.repo.repo,
       sha,
       state: status.state,
-      context: STATUS_CONTEXT,
+      context: statusContext,
       description: status.description,
     });
 

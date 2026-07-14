@@ -2,12 +2,30 @@
  * Tests for status builder
  */
 
-import { determineStatus, STATUS_CONTEXT } from '../status';
+import { determineStatus, resolveStatusContext, STATUS_CONTEXT } from '../status';
 import { ResultsData } from '../types';
 
 describe('STATUS_CONTEXT', () => {
   it('T6.7 - context is TestivAI / visual', () => {
     expect(STATUS_CONTEXT).toBe('TestivAI / visual');
+  });
+});
+
+describe('resolveStatusContext', () => {
+  it('returns the provided status-context input', () => {
+    expect(resolveStatusContext('TestivAI / visual (pytest)')).toBe('TestivAI / visual (pytest)');
+  });
+
+  it('falls back to the default when input is empty', () => {
+    expect(resolveStatusContext('')).toBe(STATUS_CONTEXT);
+  });
+
+  it('falls back to the default when input is whitespace-only', () => {
+    expect(resolveStatusContext('   ')).toBe(STATUS_CONTEXT);
+  });
+
+  it('trims surrounding whitespace from the input', () => {
+    expect(resolveStatusContext('  TestivAI / e2e  ')).toBe('TestivAI / e2e');
   });
 });
 

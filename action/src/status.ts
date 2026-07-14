@@ -6,6 +6,15 @@ import { ResultsData } from './types';
 
 export const STATUS_CONTEXT = 'TestivAI / visual';
 
+/**
+ * Resolve the commit status context from the status-context input.
+ * Falls back to the default so callers pinned to an action.yml without
+ * the input (or passing an empty string) keep the historical context.
+ */
+export function resolveStatusContext(input: string): string {
+  return input.trim() || STATUS_CONTEXT;
+}
+
 export interface StatusConfig {
   failOnDiff: boolean;
 }

@@ -2,8 +2,36 @@
  * Tests for comment builder
  */
 
-import { buildComment, buildEmptyComment } from '../comment';
+import { buildComment, buildEmptyComment, resolveUpsertMarker, UPSERT_MARKER } from '../comment';
+import { STATUS_CONTEXT } from '../status';
 import { ResultsData } from '../types';
+
+describe('resolveUpsertMarker', () => {
+  it('returns the legacy bare marker for the default status context', () => {
+    expect(resolveUpsertMarker(STATUS_CONTEXT)).toBe('<!-- testivai-visual-report -->');
+  });
+
+  it('namespaces the marker with a custom status context', () => {
+    expect(resolveUpsertMarker('TestivAI / visual (pytest)'))
+      .toBe('<!-- testivai-visual-report:TestivAI / visual (pytest) -->');
+  });
+
+  it('keeps the legacy marker out of namespaced comment bodies (no cross-lane upsert match)', () => {
+    const namespaced = resolveUpsertMarker('TestivAI / e2e');
+    expect(namespaced.includes(UPSERT_MARKER)).toBe(false);
+  });
+
+  it('markers of prefix-related contexts do not match each other', () => {
+    const short = resolveUpsertMarker('TestivAI / A');
+    const long = resolveUpsertMarker('TestivAI / A (mobile)');
+    expect(long.includes(short)).toBe(false);
+  });
+
+  it('sanitizes characters that would break the HTML comment', () => {
+    expect(resolveUpsertMarker('a -- b')).toBe('<!-- testivai-visual-report:a - b -->');
+    expect(resolveUpsertMarker('a <b> c')).toBe('<!-- testivai-visual-report:a b c -->');
+  });
+});
 
 describe('buildComment', () => {
   it('T6.1 - includes TestivAI Visual Report header', () => {
@@ -76,6 +104,18 @@ describe('buildComment', () => {
   it('T6.6 - empty results has graceful message', () => {
     const comment = buildEmptyComment();
     expect(comment).toContain('No visual snapshots were captured');
+  });
+
+  it('embeds a custom upsert marker when provided', () => {
+    const results: ResultsData = {
+      timestamp: Date.now(),
+      summary: { total: 0, passed: 0, changed: 0, newSnapshots: 0 },
+      snapshots: [],
+    };
+    const marker = resolveUpsertMarker('TestivAI / visual (pytest)');
+
+    expect(buildComment(results, undefined, marker)).toContain(marker);
+    expect(buildEmptyComment(undefined, marker)).toContain(marker);
   });
 
   it('renders new-snapshots section when present', () => {

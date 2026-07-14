@@ -31,6 +31,10 @@ inputs:
     description: 'Name of the uploaded artifact'
     required: false
     default: 'testivai-visual-report'
+  status-context:
+    description: 'Name of the commit status context; also namespaces the PR comment (use a distinct value per workflow when multiple visual lanes run in one repo)'
+    required: false
+    default: 'TestivAI / visual'
 
 outputs:
   artifact-id:
