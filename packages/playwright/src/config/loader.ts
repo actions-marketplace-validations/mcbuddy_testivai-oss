@@ -103,7 +103,13 @@ export function mergeTestConfig(
       ...testConfig.performanceMetrics
     },
     selectors: testConfig.selectors,
-    useBrowserCapture: testConfig.useBrowserCapture
+    useBrowserCapture: testConfig.useBrowserCapture,
+    // Per-call capture options must survive the merge: without these,
+    // witness(page, testInfo, name, { ignoreSelectors }) silently ignored
+    // the selectors (masked for a long time by the diff engine's cumulated
+    // threshold absorbing the tiny leaked pixels).
+    ignoreSelectors: testConfig.ignoreSelectors,
+    stabilize: testConfig.stabilize
   };
 }
 
