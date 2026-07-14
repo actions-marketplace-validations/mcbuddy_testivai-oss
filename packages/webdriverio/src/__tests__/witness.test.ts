@@ -150,7 +150,7 @@ describe('witness()', () => {
       await witness(browser, 'stable');
 
       const scripts = executedScripts(browser);
-      expect(scripts.some((s) => s.includes('animation: none'))).toBe(true);
+      expect(scripts.some((s) => s.includes('animation-duration: 0.001s'))).toBe(true);
       expect(scripts.some((s) => s.includes('caret-color: transparent'))).toBe(true);
       expect(scripts.some((s) => s.includes('el.remove()'))).toBe(true);
     });
@@ -180,7 +180,7 @@ describe('witness()', () => {
       await witness(browser, 'raw');
 
       const scripts = executedScripts(browser);
-      expect(scripts.some((s) => s.includes('animation: none'))).toBe(false);
+      expect(scripts.some((s) => s.includes('animation-duration'))).toBe(false);
       expect(scripts.some((s) => s.includes('el.remove()'))).toBe(false);
     });
 
@@ -189,7 +189,7 @@ describe('witness()', () => {
       await witness(browser, 'raw-call', { stabilize: false });
 
       const scripts = executedScripts(browser);
-      expect(scripts.some((s) => s.includes('animation: none'))).toBe(false);
+      expect(scripts.some((s) => s.includes('animation-duration'))).toBe(false);
     });
 
     it('removes the injected CSS even when the screenshot throws', async () => {

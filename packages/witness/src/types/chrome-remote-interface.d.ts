@@ -30,7 +30,7 @@ declare module 'chrome-remote-interface' {
     Runtime: {
       enable(): Promise<void>;
       addBinding(params: { name: string }): Promise<void>;
-      evaluate(params: { expression: string; returnByValue?: boolean }): Promise<{ result: { value: any } }>;
+      evaluate(params: { expression: string; returnByValue?: boolean; awaitPromise?: boolean }): Promise<{ result: { value: any } }>;
       bindingCalled(callback: (params: { name: string; payload: string }) => void): void;
       consoleAPICalled(callback: (params: any) => void): void;
       exceptionThrown(callback: (params: { exceptionDetails: any }) => void): void;

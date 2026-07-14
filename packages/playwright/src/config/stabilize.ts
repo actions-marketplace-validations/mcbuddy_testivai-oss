@@ -20,13 +20,18 @@ import type { Page } from '@playwright/test';
 import { TestivAIConfig, TestivAIProjectConfig } from '../types';
 
 /**
- * CSS injected for the duration of the capture. `animation: none` freezes
- * every animation at its initial state (deterministic across runs);
- * transitions are removed so property changes land instantly.
+ * CSS injected for the duration of the capture. Near-zero durations (not
+ * `none`) let every animation/transition COMPLETE instantly at its final
+ * state — pages whose content starts hidden and reveals via entry
+ * animations or class transitions render fully. (`animation: none` would
+ * freeze them at the hidden initial state.)
  */
 export const STABILIZE_CSS = `*, *::before, *::after {
-  animation: none !important;
-  transition: none !important;
+  animation-duration: 0.001s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001s !important;
+  transition-delay: 0s !important;
   caret-color: transparent !important;
   scroll-behavior: auto !important;
 }`;

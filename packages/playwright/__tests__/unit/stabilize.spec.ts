@@ -27,9 +27,12 @@ describe('capture stabilization', () => {
     fs.writeFileSync(path.join(root, '.testivai', 'config.json'), JSON.stringify(config));
   };
 
-  it('neutralizes animations, transitions, caret, and smooth scroll', () => {
-    expect(STABILIZE_CSS).toContain('animation: none !important');
-    expect(STABILIZE_CSS).toContain('transition: none !important');
+  it('completes animations/transitions instantly at their final state', () => {
+    // near-zero durations, NOT 'none': entry animations must END visible
+    expect(STABILIZE_CSS).toContain('animation-duration: 0.001s !important');
+    expect(STABILIZE_CSS).toContain('animation-iteration-count: 1 !important');
+    expect(STABILIZE_CSS).toContain('transition-duration: 0.001s !important');
+    expect(STABILIZE_CSS).not.toContain('animation: none');
     expect(STABILIZE_CSS).toContain('caret-color: transparent !important');
     expect(STABILIZE_CSS).toContain('scroll-behavior: auto !important');
   });

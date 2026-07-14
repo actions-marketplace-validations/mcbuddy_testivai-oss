@@ -275,6 +275,7 @@ function renderDomHint(snapshot: SnapshotResult): string {
   if (s.added > 0) parts.push(`${s.added} added`);
   if (s.removed > 0) parts.push(`${s.removed} removed`);
   if (s.attributeChanges > 0) parts.push(`${s.attributeChanges} attribute change${s.attributeChanges === 1 ? '' : 's'}`);
+  if (s.textChanges) parts.push(`${s.textChanges} text change${s.textChanges === 1 ? '' : 's'}`);
   return `
     <div class="dom-hint changed" title="Structural DOM changes detected alongside the pixel diff.">
       <span class="label">DOM changed</span>

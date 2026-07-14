@@ -21,10 +21,13 @@ import { logger } from '../utils/logger';
 import { filterCrawledLinks, pageNameFromUrl, resolvePages } from './crawl';
 import { findChrome, launchChrome, LaunchedChrome } from './launcher';
 
-/** Mirrors the adapters' stabilization CSS (see packages/playwright config/stabilize). */
+/** Mirrors the adapters' stabilization CSS (see packages/playwright config/stabilize):
+ * near-zero durations complete animations at their FINAL state, so pages
+ * with entry animations render fully instead of freezing hidden. */
 const STABILIZE_CSS =
-  '*, *::before, *::after { animation: none !important; transition: none !important; ' +
-  'caret-color: transparent !important; scroll-behavior: auto !important; }';
+  '*, *::before, *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; ' +
+  'animation-iteration-count: 1 !important; transition-duration: 0.001s !important; ' +
+  'transition-delay: 0s !important; caret-color: transparent !important; scroll-behavior: auto !important; }';
 
 export interface StandaloneOptions {
   /** Explicit page paths; disables crawling when provided. */
@@ -107,6 +110,34 @@ async function prepPage(
   }
 }
 
+/**
+ * Scroll stepwise through the page (viewport-height hops, bounded), then
+ * back to the top. Fires IntersectionObserver reveal-on-scroll content that
+ * a headless capture would otherwise never render — without resizing the
+ * viewport, which would explode 100vh-based layouts.
+ */
+async function revealPage(client: any): Promise<void> {
+  try {
+    await client.Runtime.evaluate({
+      expression: `(async () => {
+        const step = window.innerHeight || 800;
+        const max = Math.min(document.documentElement.scrollHeight, step * 40);
+        for (let y = 0; y <= max; y += step) {
+          window.scrollTo(0, y);
+          await new Promise(r => setTimeout(r, 120));
+        }
+        window.scrollTo(0, 0);
+        await new Promise(r => setTimeout(r, 250));
+        return true;
+      })()`,
+      returnByValue: true,
+      awaitPromise: true,
+    });
+  } catch {
+    // best-effort: capture proceeds from the top either way
+  }
+}
+
 /** Full-page screenshot via layout metrics (same technique as the Playwright adapter's CDP path). */
 async function captureFullPage(client: any): Promise<Buffer> {
   const metrics = await client.Page.getLayoutMetrics();
@@ -180,6 +211,7 @@ export async function runStandaloneWitness(
         });
         await waitFor(page.client, `document.readyState === 'complete'`, 15_000);
         await prepPage(page.client, config.stabilize, config.ignoreSelectors ?? []);
+        await revealPage(page.client);
 
         const screenshot = await captureFullPage(page.client);
         const dom = await evaluate<string>(page.client, 'document.documentElement.outerHTML');

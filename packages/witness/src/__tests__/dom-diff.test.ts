@@ -25,7 +25,8 @@ describe('domDiff', () => {
       const candidate = '<div><p>One</p><p>Two</p></div>';
       const result = domDiff(baseline, candidate);
       expect(result.domChanged).toBe(true);
-      expect(result.summary).toEqual({ added: 1, removed: 0, attributeChanges: 0 });
+      // the new <p>'s text ("Two") also registers as a text change
+      expect(result.summary).toEqual({ added: 1, removed: 0, attributeChanges: 0, textChanges: 1 });
     });
 
     test('detects removed elements', () => {
@@ -33,7 +34,7 @@ describe('domDiff', () => {
       const candidate = '<div><p>One</p></div>';
       const result = domDiff(baseline, candidate);
       expect(result.domChanged).toBe(true);
-      expect(result.summary).toEqual({ added: 0, removed: 1, attributeChanges: 0 });
+      expect(result.summary).toEqual({ added: 0, removed: 1, attributeChanges: 0, textChanges: 1 });
     });
 
     test('detects mixed add/remove (different tag types)', () => {
@@ -53,7 +54,7 @@ describe('domDiff', () => {
       const candidate = '<button class="secondary">Go</button>';
       const result = domDiff(baseline, candidate);
       expect(result.domChanged).toBe(true);
-      expect(result.summary).toEqual({ added: 0, removed: 0, attributeChanges: 1 });
+      expect(result.summary).toEqual({ added: 0, removed: 0, attributeChanges: 1, textChanges: 0 });
     });
 
     test('detects added attribute', () => {
@@ -79,10 +80,19 @@ describe('domDiff', () => {
   });
 
   describe('text content', () => {
-    test('ignores text content changes', () => {
+    test('detects text content changes', () => {
       const baseline = '<p>Hello world</p>';
       const candidate = '<p>Goodbye world</p>';
-      // Text-only changes are pixel territory, not DOM territory.
+      // A wording edit is a real UI change — with noiseAutoPass enabled, a
+      // text-blind DOM diff would silently auto-pass it.
+      const result = domDiff(baseline, candidate);
+      expect(result.domChanged).toBe(true);
+      expect(result.summary).toEqual({ added: 0, removed: 0, attributeChanges: 0, textChanges: 1 });
+    });
+
+    test('ignores script and style bodies', () => {
+      const baseline = '<div><script>var a = 1;</script><style>.x{color:red}</style><p>Hi</p></div>';
+      const candidate = '<div><script>var a = 2;</script><style>.x{color:blue}</style><p>Hi</p></div>';
       expect(domDiff(baseline, candidate)).toEqual({ domChanged: false, summary: null });
     });
 

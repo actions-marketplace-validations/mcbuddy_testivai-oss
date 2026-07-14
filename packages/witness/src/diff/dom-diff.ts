@@ -28,7 +28,9 @@
  *     as attribute changes if reordering changes attributes (uncommon).
  *     This is acceptable because the SAME page captured twice should
  *     normally produce identical token lists.
- *   - Text content is ignored. Visual regression on text wording is what
+ *   - Visible text nodes ARE tokenized (normalized whitespace) — a text
+ *     edit is the most common real UI change and must never read as
+ *     "structurally identical". Script/style bodies stay opaque. What
  *     pixels are for — we don't want to flag every dynamic timestamp.
  *   - Comments and processing instructions are ignored.
  *
@@ -55,6 +57,12 @@ export interface DomDiffSummary {
   removed: number;
   /** Tag pairs present in both but with different attributes. */
   attributeChanges: number;
+  /**
+   * Visible text tokens that differ (edited, added, or removed). Text
+   * matters: with noiseAutoPass a text-blind DOM diff would silently
+   * auto-pass wording changes — the most common real UI change.
+   */
+  textChanges: number;
 }
 
 interface OpenEvent {
@@ -83,12 +91,22 @@ export function domDiff(baselineHtml: string | null | undefined, candidateHtml: 
     return { domChanged: false, summary: null };
   }
 
-  const baselineEvents = tokenize(baselineHtml);
-  const candidateEvents = tokenize(candidateHtml);
+  const baselineTok = tokenize(baselineHtml);
+  const candidateTok = tokenize(candidateHtml);
 
   // Bucket by tag name; within each bucket, count attrSig multisets
-  const baselineBuckets = bucketize(baselineEvents);
-  const candidateBuckets = bucketize(candidateEvents);
+  const baselineBuckets = bucketize(baselineTok.events);
+  const candidateBuckets = bucketize(candidateTok.events);
+
+  // Text multiset comparison: matched pairs drop out; every unmatched
+  // token on either side counts once (an edit surfaces as old+new pair,
+  // reported as 1 change).
+  let textUnmatched = 0;
+  const textKeys = new Set<string>([...baselineTok.texts.keys(), ...candidateTok.texts.keys()]);
+  for (const key of textKeys) {
+    textUnmatched += Math.abs((baselineTok.texts.get(key) ?? 0) - (candidateTok.texts.get(key) ?? 0));
+  }
+  const textChanges = Math.ceil(textUnmatched / 2);
 
   let added = 0;
   let removed = 0;
@@ -123,11 +141,11 @@ export function domDiff(baselineHtml: string | null | undefined, candidateHtml: 
     attributeChanges += overlap - matchingPairs;
   }
 
-  const domChanged = added > 0 || removed > 0 || attributeChanges > 0;
+  const domChanged = added > 0 || removed > 0 || attributeChanges > 0 || textChanges > 0;
 
   return {
     domChanged,
-    summary: domChanged ? { added, removed, attributeChanges } : null,
+    summary: domChanged ? { added, removed, attributeChanges, textChanges } : null,
   };
 }
 
@@ -161,15 +179,27 @@ function sumValues(m: Map<string, number>): number {
  * Robust against malformed HTML — we never throw; on weird input we
  * just stop emitting events. Worst case = false "no DOM signal".
  */
-function tokenize(html: string): OpenEvent[] {
+function tokenize(html: string): { events: OpenEvent[]; texts: Map<string, number> } {
   const events: OpenEvent[] = [];
+  const texts = new Map<string, number>();
   const len = html.length;
   let i = 0;
+
+  const collectText = (from: number, to: number): void => {
+    if (to <= from) return;
+    const normalized = html.slice(from, to).replace(/\s+/g, ' ').trim();
+    if (!normalized) return;
+    texts.set(normalized, (texts.get(normalized) ?? 0) + 1);
+  };
 
   while (i < len) {
     // Find next '<'
     const lt = html.indexOf('<', i);
-    if (lt < 0) break;
+    if (lt < 0) {
+      collectText(i, len);
+      break;
+    }
+    collectText(i, lt);
     i = lt + 1;
     if (i >= len) break;
 
@@ -232,7 +262,7 @@ function tokenize(html: string): OpenEvent[] {
     i = tagEnd + 1;
   }
 
-  return events;
+  return { events, texts };
 }
 
 /**

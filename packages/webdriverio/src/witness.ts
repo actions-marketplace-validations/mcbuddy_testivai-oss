@@ -31,8 +31,9 @@ const STYLE_ID = '__testivai_capture_css__';
  * adapter's STABILIZE_CSS.
  */
 const STABILIZE_CSS =
-  '*, *::before, *::after { animation: none !important; transition: none !important; ' +
-  'caret-color: transparent !important; scroll-behavior: auto !important; }';
+  '*, *::before, *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; ' +
+  'animation-iteration-count: 1 !important; transition-duration: 0.001s !important; ' +
+  'transition-delay: 0s !important; caret-color: transparent !important; scroll-behavior: auto !important; }';
 
 /** Build the ignoreSelectors CSS block (visibility preserves layout). */
 function buildIgnoreCss(selectors: string[]): string {

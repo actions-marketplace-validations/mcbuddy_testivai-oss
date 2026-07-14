@@ -14,7 +14,7 @@ export interface SnapshotDomSignal {
   /** True if the DOM differs structurally between baseline and candidate. */
   changed: boolean;
   /** Per-bucket counts; null when changed is false. */
-  summary: { added: number; removed: number; attributeChanges: number } | null;
+  summary: { added: number; removed: number; attributeChanges: number; textChanges?: number } | null;
   /**
    * Pixel diff is non-zero but DOM is structurally unchanged — likely
    * render noise (anti-aliasing, font hinting, sub-pixel layout).

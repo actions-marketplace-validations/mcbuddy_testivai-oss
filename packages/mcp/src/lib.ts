@@ -5,7 +5,7 @@ import * as path from 'path';
 export interface DomInfo {
   changed: boolean;
   noiseHint: boolean;
-  summary: { added: number; removed: number; attributeChanges: number } | null;
+  summary: { added: number; removed: number; attributeChanges: number; textChanges?: number } | null;
 }
 
 export interface SnapshotResult {
@@ -63,7 +63,9 @@ export function verdictFor(snapshot: SnapshotResult): string {
   }
   if (snapshot.dom?.changed) {
     const s = snapshot.dom.summary;
-    const detail = s ? ` (${s.added} added, ${s.removed} removed, ${s.attributeChanges} attribute changes)` : '';
+    const detail = s
+      ? ` (${s.added} added, ${s.removed} removed, ${s.attributeChanges} attribute changes${s.textChanges ? `, ${s.textChanges} text changes` : ''})`
+      : '';
     return `changed (${pct}) and the DOM changed${detail} — a real structural change; confirm it is intended before approving`;
   }
   return `changed (${pct}) — no DOM data; treat as needing human review`;
