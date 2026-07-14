@@ -28,7 +28,9 @@
     "release": "pnpm build && changeset publish"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@changesets/cli": "^2.31.0",
