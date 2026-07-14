@@ -131,6 +131,22 @@ describe('witness()', () => {
     );
   });
 
+  describe('variant keying', () => {
+    it('folds the variant into the snapshot name (sanitized)', async () => {
+      await witness(makeBrowser(), 'homepage', { variant: 'Firefox Mobile @2x' });
+      const tempDir = path.join(projectRoot, '.testivai', 'temp', 'homepage__firefox_mobile_2x');
+      expect(fs.existsSync(path.join(tempDir, 'screenshot.png'))).toBe(true);
+    });
+
+    it('different variants never collide', async () => {
+      await witness(makeBrowser(), 'homepage', { variant: 'chrome' });
+      await witness(makeBrowser(), 'homepage', { variant: 'firefox' });
+      const base = path.join(projectRoot, '.testivai', 'temp');
+      expect(fs.existsSync(path.join(base, 'homepage__chrome', 'screenshot.png'))).toBe(true);
+      expect(fs.existsSync(path.join(base, 'homepage__firefox', 'screenshot.png'))).toBe(true);
+    });
+  });
+
   describe('capture preparation (stabilize + ignoreSelectors)', () => {
     const executedScripts = (browser: WitnessBrowser): string[] =>
       (browser.execute as jest.Mock).mock.calls

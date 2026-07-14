@@ -9,14 +9,14 @@ items marked 🤝 are good community contributions.
 
 ## 1. Correctness first — things that behave like bugs
 
-### 1.1 Baseline keying by project / browser / viewport — **M**
-Baselines are stored as `.testivai/baselines/<name>/` keyed by snapshot name
-alone. Two Playwright projects (e.g. `chromium-desktop` and `mobile-safari`)
-capturing the same snapshot name **collide and overwrite each other**.
-Playwright's native snapshots key by platform + project automatically; we
-must too. Plan: `baselines/<name>/<project-or-browser>-<WxH>/`, with
-migration for existing single-variant layouts. This also unblocks
-cross-browser and responsive testing (see 3.2, 3.3).
+### 1.1 Baseline keying by project / browser — ✅ SHIPPED
+Multi-project Playwright configs now key snapshots as `<name>__<project>`
+(single-project configs untouched — no migration needed); WebdriverIO gets a
+per-call `variant` option for multi-capability runs. The variant lives in
+the snapshot name, so the on-disk layout, results.json, report, and both
+approve flows work unchanged. Unblocks cross-browser (3.3) and the viewport
+matrix (2.3). Still open:
+- standalone `witness <url>` viewport-matrix keying (`__WxH`) — lands with 2.3
 
 ### 1.2 Capture stabilization defaults — ✅ SHIPPED
 Both adapters now freeze CSS animations/transitions, hide the caret, force

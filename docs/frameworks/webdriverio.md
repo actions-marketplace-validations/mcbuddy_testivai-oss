@@ -143,6 +143,9 @@ await testivai.witness(browser, 'dashboard', { ignoreSelectors: ['.live-feed'] }
 
 // Opt out of capture stabilization (animations frozen, fonts awaited) per call
 await testivai.witness(browser, 'animation-demo', { stabilize: false });
+
+// Multi-capability runs: key baselines per capability so they don't collide
+await testivai.witness(browser, 'homepage', { variant: 'firefox-mobile' });
 ```
 
 ---

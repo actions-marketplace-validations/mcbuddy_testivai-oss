@@ -129,7 +129,13 @@ export default defineConfig({
 
 ## 4. Add Capture Calls
 
-Import `testivai` from the SDK and call `testivai.witness(page, testInfo, 'name')` in your tests. An optional fourth argument takes per-snapshot overrides, e.g. `{ ignoreSelectors: ['.live-widget'], stabilize: false }`:
+Import `testivai` from the SDK and call `testivai.witness(page, testInfo, 'name')` in your tests.
+
+**Multiple Playwright projects?** Snapshots are keyed per project
+automatically: with projects `chromium-desktop` and `mobile-safari`, the
+same call produces `homepage__chromium-desktop` and
+`homepage__mobile-safari` — no baseline collisions. Single-project configs
+keep plain names. An optional fourth argument takes per-snapshot overrides, e.g. `{ ignoreSelectors: ['.live-widget'], stabilize: false }`:
 
 ```ts
 import { test } from '@playwright/test';

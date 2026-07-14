@@ -30,6 +30,26 @@ function getSnapshotNameFromUrl(pageUrl: string): string {
 }
 
 /**
+ * Compute the effective snapshot name, folding in a project variant when the
+ * Playwright config runs multiple projects. Without this, two projects (e.g.
+ * chromium-desktop and mobile-safari) capturing the same snapshot name would
+ * overwrite each other's baselines under .testivai/baselines/<name>/.
+ *
+ * Single-project configs are untouched: 'homepage' stays 'homepage'.
+ * Multi-project configs get 'homepage__chromium', 'homepage__mobile-safari'.
+ * The variant lives in the NAME, so the on-disk layout, results.json schema,
+ * report, approve CLI, and PR-comment approvals all work unchanged.
+ */
+export function effectiveSnapshotName(baseName: string, testInfo: TestInfo): string {
+  const projects = (testInfo as any)?.config?.projects;
+  const projectName = (testInfo as any)?.project?.name;
+  if (!Array.isArray(projects) || projects.length <= 1) return baseName;
+  if (typeof projectName !== 'string' || projectName.length === 0) return baseName;
+  const safeVariant = projectName.replace(/[^a-z0-9_-]+/gi, '_').toLowerCase();
+  return `${baseName}__${safeVariant}`;
+}
+
+/**
  * Captures a snapshot of the page, including a screenshot, DOM, and layout data.
  * The evidence is stored in a temporary directory for the reporter to process later.
  *
@@ -64,7 +84,7 @@ export async function snapshot(
   const outputDir = path.join(process.cwd(), '.testivai', 'temp');
   await fs.ensureDir(outputDir);
 
-  const snapshotName = name || getSnapshotNameFromUrl(page.url());
+  const snapshotName = effectiveSnapshotName(name || getSnapshotNameFromUrl(page.url()), testInfo);
   const timestamp = Date.now();
   const safeName = snapshotName.replace(/[^a-z0-9]/gi, '_').toLowerCase();
   const baseFilename = `${timestamp}_${safeName}`;

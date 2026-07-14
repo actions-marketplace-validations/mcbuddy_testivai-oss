@@ -40,6 +40,13 @@ export interface WitnessOptions {
    */
   ignoreSelectors?: string[];
   /**
+   * Variant key for multi-browser / multi-viewport runs. Folded into the
+   * snapshot name (`<name>__<variant>`) so parallel capabilities don't
+   * overwrite each other's baselines. Example: set it per capability in
+   * wdio.conf.ts (`'chrome-1280'`, `'firefox-mobile'`).
+   */
+  variant?: string;
+  /**
    * Stabilize the page before capture: disable CSS animations/transitions,
    * hide the text caret, and wait for web fonts to finish loading — the top
    * causes of flaky visual diffs. Default: true (also configurable globally

@@ -110,6 +110,13 @@ export async function witness(
     throw new Error('testivai.witness: browser argument must expose takeScreenshot()');
   }
 
+  // Multi-capability runs: fold the variant into the name so capabilities
+  // don't overwrite each other's baselines (same mechanism as the Playwright
+  // adapter's multi-project handling).
+  if (options.variant) {
+    name = `${name}__${options.variant.replace(/[^a-z0-9_-]+/gi, '_').toLowerCase()}`;
+  }
+
   // 0. Prepare the page: stabilization CSS (animations/caret/fonts — the
   //    flake killers) + ignoreSelectors from config.json and this call,
   //    injected as one style tag and removed after the capture.
