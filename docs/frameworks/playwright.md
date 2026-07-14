@@ -241,6 +241,16 @@ GitHub Actions example:
     TESTIVAI_API_KEY: ${{ secrets.TESTIVAI_API_KEY }}
 ```
 
+**Baselines belong to the environment that compares them.** Font
+rasterization differs between macOS, Windows, and Linux, so a baseline
+captured on your laptop will report diffs on a Linux CI runner every
+time — 100% changed, forever. If CI is where comparisons happen, adopt
+CI's own captures as baselines: the [report action](../github-action.md)
+bundles every changed capture into the artifact as
+`visual-report/pending-baselines/`, and a `/testivai approve` PR comment
+commits them back to the branch. Local runs on a different OS remain
+useful as a smoke check, just not as the source of truth.
+
 ---
 
 ## What gets captured
