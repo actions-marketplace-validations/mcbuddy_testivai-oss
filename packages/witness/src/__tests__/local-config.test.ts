@@ -157,4 +157,29 @@ describe('Local Config', () => {
       expect(config.ignoreSelectors).toEqual(['.badge']);
     });
   });
+
+  describe('TESTIVAI_MODE env override', () => {
+    const saved = process.env.TESTIVAI_MODE;
+    afterEach(() => {
+      if (saved === undefined) delete process.env.TESTIVAI_MODE;
+      else process.env.TESTIVAI_MODE = saved;
+    });
+
+    it('cloud env wins over a local-mode config file', () => {
+      createDefaultConfig(tmpDir, { mode: 'local' });
+      process.env.TESTIVAI_MODE = 'cloud';
+      expect(isLocalMode(tmpDir)).toBe(false);
+    });
+
+    it('local env wins even without a config file', () => {
+      process.env.TESTIVAI_MODE = 'local';
+      expect(isLocalMode(tmpDir)).toBe(true);
+    });
+
+    it('file decides when env is unset', () => {
+      delete process.env.TESTIVAI_MODE;
+      createDefaultConfig(tmpDir, { mode: 'local' });
+      expect(isLocalMode(tmpDir)).toBe(true);
+    });
+  });
 });

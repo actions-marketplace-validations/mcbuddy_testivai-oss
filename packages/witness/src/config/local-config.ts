@@ -151,6 +151,12 @@ export function localConfigExists(projectRoot: string): boolean {
  * Priority: `.testivai/config.json` → check for mode field → default false.
  */
 export function isLocalMode(projectRoot: string): boolean {
+  // Env override first: a repo can host BOTH lanes side by side (the demo
+  // app does), and .testivai/config.json { mode: "local" } must not hijack
+  // a cloud run. TESTIVAI_MODE=cloud|local wins over the file.
+  const envMode = process.env.TESTIVAI_MODE;
+  if (envMode === 'local') return true;
+  if (envMode === 'cloud') return false;
   if (!localConfigExists(projectRoot)) {
     return false;
   }
