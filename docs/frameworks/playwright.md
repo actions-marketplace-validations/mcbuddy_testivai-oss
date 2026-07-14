@@ -192,6 +192,38 @@ npx playwright test
 
 ---
 
+## Cross-browser testing
+
+The capture path uses only native Playwright APIs, so Firefox and WebKit
+work exactly like Chromium. Enable them by listing multiple projects:
+
+```ts
+projects: [
+  { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+  { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
+  { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
+],
+```
+
+With more than one project, every snapshot is keyed per browser
+automatically — `header__chromium`, `header__firefox`, `header__webkit` —
+so each engine diffs against its own baseline (browsers rasterize fonts
+and anti-aliasing differently; comparing across engines would always be
+red). Approve them like any other snapshot: `npx testivai approve --all`.
+
+**Migrating from a single-project config:** snapshot names gain the
+`__<project>` suffix the moment a second project appears. Your existing
+un-suffixed baselines become orphans — delete them, run once, and approve
+the new per-browser set.
+
+Remember to install the extra engines in CI:
+`npx playwright install chromium firefox webkit --with-deps`.
+
+The standalone `testivai witness <url>` crawler and the experimental
+`testivai run` sidecar drive Chrome over CDP and remain Chromium-only.
+
+---
+
 ## CI/CD
 
 GitHub Actions example:
@@ -217,12 +249,12 @@ GitHub Actions example:
 |---|---|---|
 | Full-page PNG screenshot | ✅ | ✅ |
 | Subdirectory layout (`temp/<name>/screenshot.png`) | ✅ | — |
-| Page HTML (structure) | — | ✅ |
+| Page HTML (structure, powers the DOM diff / noise hint) | ✅ | ✅ |
 | Computed styles | — | ✅ |
 | Bounding boxes / layout JSON | — | ✅ |
 | Performance metrics (Web Vitals) | — | ✅ |
 
-In local mode, only the screenshot is captured. Cloud mode additionally captures structural and performance data for REVEAL Engine™ analysis.
+In local mode, the screenshot and a DOM snapshot are captured — the DOM snapshot powers the render-noise hint and text-change detection. Cloud mode additionally captures computed styles, layout, and performance data for REVEAL Engine™ analysis.
 
 ---
 

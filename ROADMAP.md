@@ -96,10 +96,15 @@ boxes, and report *which elements* changed: "`.pricing-card:nth-child(2)`
 moved 24px down". No local-first tool does this; it's also the single most
 useful output for an AI agent deciding whether its change was intended.
 
-### 3.3 Cross-browser validation — **S** (after 1.1)
+### 3.3 Cross-browser validation — ✅ SHIPPED
 Nothing in the capture path is Chromium-specific (native Playwright APIs
-throughout). After baseline keying lands, test + document Firefox/WebKit
-support and add them to the e2e matrix.
+throughout), and baseline keying (1.1) makes multi-browser configs safe:
+each Playwright project gets its own baselines (`<name>__chromium`,
+`__firefox`, `__webkit`). Verified stable across all three engines in the
+demo app (18 snapshots, repeated runs, zero flakes). See the cross-browser
+section in `docs/frameworks/playwright.md`. The standalone `testivai
+witness <url>` crawler and the `testivai run` sidecar remain
+Chromium-only (CDP).
 
 ### 3.4 Anti-aliasing tuning — **S** 🤝
 Expose pixelmatch's `includeAA` and per-channel threshold in config for
