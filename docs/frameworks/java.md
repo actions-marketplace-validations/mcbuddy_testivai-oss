@@ -6,9 +6,9 @@ title: Java (playwright-java)
 
 :::warning Experimental
 The Java adapter ships full source in [`java/`](../../java) with the same
-capture semantics as every other adapter, but is not yet published to Maven
-Central and not yet exercised in CI. Treat it as a preview; feedback and
-contributions welcome.
+capture semantics as every other adapter — compiled and unit-tested in CI
+(JUnit 5 + Mockito) — but is not yet published to Maven Central. Build it
+with `mvn package` for now; feedback and contributions welcome.
 :::
 
 Local-first visual regression for **playwright-java**, sharing baselines,

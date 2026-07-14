@@ -65,3 +65,31 @@ jobs:
 
       - name: Run OSS smoke E2E
         run: pnpm e2e
+
+  python-adapter:
+    name: Python adapter (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install and test
+        working-directory: python
+        run: |
+          pip install -e . pytest
+          pytest tests/ -q
+
+  java-adapter:
+    name: Java adapter (JUnit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test
+        working-directory: java
+        run: mvn -B --no-transfer-progress test
