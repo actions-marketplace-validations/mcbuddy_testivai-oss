@@ -106,8 +106,29 @@ async function prepPage(
       ` document.head.appendChild(el); return true; })()`,
   );
   if (stabilize) {
-    await waitFor(client, `document.fonts ? document.fonts.status !== 'loading' : true`, 3000);
+    // Remote sites load webfonts over the real network from a cold profile;
+    // a fallback-font capture diffs 30%+ against a webfont baseline. Wait
+    // generously — resolves in well under a second once fonts are cached
+    // by the OS/network layer.
+    await waitFor(client, `document.fonts ? document.fonts.status !== 'loading' : true`, 10_000);
+    await evaluate(client, `document.fonts && document.fonts.ready`); // settle
   }
+}
+
+/**
+ * Serialize the DOM with ignored elements removed. `ignoreSelectors`
+ * excludes an element from the pixel diff (visibility:hidden), so it must
+ * be excluded from the DOM/text signal too — otherwise dynamic ignored
+ * content (counters, feeds) flags a DOM change the pixels can't show.
+ */
+function domSnapshotExpression(ignoreSelectors: string[]): string {
+  return `(() => {
+    const clone = document.documentElement.cloneNode(true);
+    for (const sel of ${JSON.stringify(ignoreSelectors)}) {
+      try { clone.querySelectorAll(sel).forEach(el => el.remove()); } catch {}
+    }
+    return clone.outerHTML;
+  })()`;
 }
 
 /**
@@ -140,9 +161,21 @@ async function revealPage(client: any): Promise<void> {
 
 /** Full-page screenshot via layout metrics (same technique as the Playwright adapter's CDP path). */
 async function captureFullPage(client: any): Promise<Buffer> {
-  const metrics = await client.Page.getLayoutMetrics();
-  const width = Math.ceil(metrics.cssContentSize?.width ?? metrics.contentSize.width);
-  const height = Math.ceil(metrics.cssContentSize?.height ?? metrics.contentSize.height);
+  // Freshly-launched Chrome can report zero-size content before its first
+  // real layout — poll briefly until metrics are usable.
+  let width = 0;
+  let height = 0;
+  const deadline = Date.now() + 5000;
+  for (;;) {
+    const metrics = await client.Page.getLayoutMetrics();
+    width = Math.ceil(metrics.cssContentSize?.width ?? metrics.contentSize.width);
+    height = Math.ceil(metrics.cssContentSize?.height ?? metrics.contentSize.height);
+    if ((width > 0 && height > 0) || Date.now() >= deadline) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  if (width <= 0 || height <= 0) {
+    throw new Error(`page reported unusable content size ${width}x${height}`);
+  }
   const shot = await client.Page.captureScreenshot({
     format: 'png',
     captureBeyondViewport: true,
@@ -214,7 +247,7 @@ export async function runStandaloneWitness(
         await revealPage(page.client);
 
         const screenshot = await captureFullPage(page.client);
-        const dom = await evaluate<string>(page.client, 'document.documentElement.outerHTML');
+        const dom = await evaluate<string>(page.client, domSnapshotExpression(config.ignoreSelectors ?? []));
         store.writeTemp(name, screenshot, typeof dom === 'string' ? dom : undefined);
 
         captured.push(name);

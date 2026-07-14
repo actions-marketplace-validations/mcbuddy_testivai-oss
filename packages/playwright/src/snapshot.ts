@@ -375,9 +375,16 @@ export async function snapshot(
     await fs.copyFile(screenshotPath, path.join(localSnapshotDir, 'screenshot.png'));
 
     try {
-      const domHtml = await page.evaluate(
-        () => document.documentElement.outerHTML
-      );
+      const domIgnoreSelectors = collectIgnoreSelectors(process.cwd(), projectConfig, effectiveConfig);
+      const domHtml = await page.evaluate((selectors: string[]) => {
+        // ignoreSelectors excludes elements from the pixel diff, so they
+        // are excluded from the DOM/text signal too (consistent semantic)
+        const clone = document.documentElement.cloneNode(true) as HTMLElement;
+        for (const sel of selectors) {
+          try { clone.querySelectorAll(sel).forEach((el) => el.remove()); } catch {}
+        }
+        return clone.outerHTML;
+      }, domIgnoreSelectors);
       if (typeof domHtml === 'string' && domHtml.length > 0) {
         await fs.writeFile(
           path.join(localSnapshotDir, 'dom.html'),

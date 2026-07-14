@@ -181,7 +181,9 @@ describe('witness()', () => {
 
       const scripts = executedScripts(browser);
       expect(scripts.some((s) => s.includes('animation-duration'))).toBe(false);
-      expect(scripts.some((s) => s.includes('el.remove()'))).toBe(false);
+      // no style tag injected — the DOM-capture script legitimately contains
+      // element removal (ignoreSelectors exclusion), so target the style id
+      expect(scripts.some((s) => s.includes('__testivai_capture_css__'))).toBe(false);
     });
 
     it('per-call stabilize: false wins over config default', async () => {
@@ -199,7 +201,7 @@ describe('witness()', () => {
       await expect(witness(browser, 'explodes')).rejects.toThrow('boom');
 
       const scripts = executedScripts(browser);
-      expect(scripts.some((s) => s.includes('el.remove()'))).toBe(true);
+      expect(scripts.some((s) => s.includes('__testivai_capture_css__') && s.includes('remove'))).toBe(true);
     });
   });
 });

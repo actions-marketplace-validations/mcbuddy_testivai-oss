@@ -147,9 +147,14 @@ export async function witness(
     try {
       const result = await browser.execute<string>(
         // Inline string form for maximum WDIO sync/async compatibility.
-        // The function-form across WDIO 8/9 has subtle typing differences;
-        // the string form is stable.
-        'return document.documentElement.outerHTML;',
+        // ignoreSelectors excludes elements from the pixel diff, so they
+        // are excluded from the DOM/text signal too (consistent semantic).
+        `var clone = document.documentElement.cloneNode(true);` +
+          `var sels = ${JSON.stringify(ignoreSelectors)};` +
+          `for (var i = 0; i < sels.length; i++) {` +
+          ` try { clone.querySelectorAll(sels[i]).forEach(function(el){ el.remove(); }); } catch (e) {}` +
+          `}` +
+          `return clone.outerHTML;`,
       );
       if (typeof result === 'string' && result.length > 0) {
         dom = result;
