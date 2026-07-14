@@ -22,7 +22,7 @@ Pixel-only visual testing drowns you in false positives — a font re-hint or an
 
 - 🆓 **Fully local, no account** — captures, diffs, and a self-contained HTML report all stay on your machine.
 - 🧠 **DOM-aware noise hint** — separates real changes from render jitter (see the banners in the report above).
-- 🔌 **First-class adapters** — Playwright and WebdriverIO, using each framework's native screenshot API.
+- 🔌 **First-class adapters** — Playwright (TS/JS **and Python**, Java experimental) and WebdriverIO, using each framework's native APIs; every language shares one set of baselines and one report.
 - 🤖 **PR-native workflow** — a GitHub Action posts the diff and approves baselines from a `/testivai approve` comment.
 - ☁️ **Optional cloud upgrade** — opt into [the hosted service](https://testiv.ai) for AI analysis, history, and team approvals. Never required.
 
@@ -59,6 +59,8 @@ Live versions are shown by the badges at the top of this README.
 | [`@testivai/witness-playwright`](./packages/playwright) | Playwright reporter/adapter built on top of `@testivai/witness` |
 | [`@testivai/witness-webdriverio`](./packages/webdriverio) | WebdriverIO service + capture function (local mode) |
 | [`@testivai/mcp`](./packages/mcp) | MCP server — visual results + diff images for AI coding agents |
+| [`testivai` (PyPI)](./python) | Python adapter for playwright-python + pytest plugin — same baselines & report |
+| [`ai.testiv:testivai`](./java) | Java adapter for playwright-java + JUnit 5 extension (experimental) |
 
 Plus:
 - [`action/`](./action) — GitHub Action for PR-based visual approvals

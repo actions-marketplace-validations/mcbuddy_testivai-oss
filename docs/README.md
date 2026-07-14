@@ -33,6 +33,8 @@ Pick the framework you use:
 
 ## Guides
 
+- **[Python (playwright-python)](./frameworks/python.md)**
+- **[Java (playwright-java)](./frameworks/java.md)**
 - **[AI agents & code assistants](./guides/ai-agents.md)**
 - **[Vibe-coded apps (Lovable, Bolt, v0)](./guides/vibe-coded-apps.md)**
 - **[CI/CD](./guides/ci-cd.md)**

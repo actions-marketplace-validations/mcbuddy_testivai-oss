@@ -107,6 +107,10 @@ teams that want stricter or looser rasterization tolerance.
 
 ## 4. Ecosystem
 
+- **Python adapter** — ✅ SHIPPED (`testivai` on PyPI pending publish): playwright-python
+  capture + pytest plugin, powered by the new `testivai report` CLI contract
+- **Java adapter** — source complete in `java/` (JUnit 5 extension), experimental
+  until Maven Central publish + CI compile 🤝
 - **Cypress adapter** — **M** 🤝 planned; adapter interface doc coming so the
   community can own it (same for Puppeteer)
 - **Storybook mode** — decision pending demand (component-story capture loop)
