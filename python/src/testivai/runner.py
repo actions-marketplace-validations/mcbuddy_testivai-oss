@@ -5,8 +5,10 @@ half of the pipeline (diff, tolerances, noise hint, HTML report, exit code).
 Node.js is guaranteed present in playwright-python environments: Playwright
 for Python bundles a Node driver. We still resolve conservatively:
   1. TESTIVAI_CLI env var — full command override (e.g. "node /x/testivai.js")
-  2. `testivai` on PATH (project installed @testivai/witness)
-  3. `npx --yes @testivai/witness` (zero-install fallback)
+  2. ./node_modules/.bin/testivai — the PROJECT's installed version (walks up
+     from cwd, Node convention; a stale global must never shadow it)
+  3. `testivai` on PATH (global install)
+  4. `npx --yes @testivai/witness` (zero-install fallback)
 """
 
 from __future__ import annotations
@@ -18,10 +20,16 @@ from pathlib import Path
 from typing import Optional
 
 
-def resolve_cli() -> list[str]:
+def resolve_cli(project_root: Optional[Path] = None) -> list[str]:
     override = os.environ.get("TESTIVAI_CLI")
     if override:
         return override.split()
+    # Project-local install wins over anything global (Node convention)
+    current = Path(project_root or Path.cwd()).resolve()
+    for candidate_root in [current, *current.parents]:
+        local_bin = candidate_root / "node_modules" / ".bin" / "testivai"
+        if local_bin.exists():
+            return [str(local_bin)]
     direct = shutil.which("testivai")
     if direct:
         return [direct]
@@ -42,7 +50,7 @@ def run_report(
     open_report: bool = False,
 ) -> int:
     """Run `testivai report` in project_root. Returns the exit code."""
-    cmd = [*resolve_cli(), "report", "-q"]
+    cmd = [*resolve_cli(project_root), "report", "-q"]
     if fail_on_diff:
         cmd.append("--fail-on-diff")
     if open_report:

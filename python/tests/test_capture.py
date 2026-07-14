@@ -149,3 +149,23 @@ def test_helpers():
     assert "caret-color: transparent" in STABILIZE_CSS
     cfg = load_local_config(Path("/nonexistent"))
     assert cfg["stabilize"] is True and cfg["threshold"] == 0.1
+
+
+def test_resolve_cli_prefers_project_local_bin(project, monkeypatch):
+    from testivai import resolve_cli
+
+    local_bin = project / "node_modules" / ".bin"
+    local_bin.mkdir(parents=True)
+    cli = local_bin / "testivai"
+    cli.write_text("#!/bin/sh\n")
+    cli.chmod(0o755)
+    monkeypatch.delenv("TESTIVAI_CLI", raising=False)
+
+    assert resolve_cli() == [str(cli)]  # project-local beats any global PATH
+
+
+def test_resolve_cli_env_override(project, monkeypatch):
+    from testivai import resolve_cli
+
+    monkeypatch.setenv("TESTIVAI_CLI", "node /x/testivai.js")
+    assert resolve_cli() == ["node", "/x/testivai.js"]
