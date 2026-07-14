@@ -8,24 +8,48 @@ export const approveCommand = new Command('approve')
   .argument('[name]', 'Snapshot name to approve (omit for interactive list)')
   .option('--all', 'Approve all changed/new snapshots')
   .option('--undo', 'Undo the last approval (restore previous baseline)')
-  .action(async (name: string | undefined, options: { all?: boolean; undo?: boolean }) => {
+  .option('--dry-run', 'Show what would be approved without modifying any files')
+  .action(async (name: string | undefined, options: { all?: boolean; undo?: boolean; dryRun?: boolean }) => {
     try {
       const cwd = process.cwd();
       const store = new BaselineStore(cwd);
 
       // ── Undo mode ─────────────────────────────────────────────────────────
       if (options.undo) {
-        if (!name) {
-          logger.error('Please specify a snapshot name to undo: testivai approve --undo <name>');
-          process.exit(1);
+        const undoName = name ?? store.findLatestUndoable();
+        if (!undoName) {
+          console.log(chalk.yellow('  No previous baseline found to undo.'));
+          return;
         }
         try {
-          store.undo(name);
-          console.log(chalk.green(`  ✓ Restored previous baseline for "${name}"`));
-          console.log(chalk.gray(`    git add .testivai/baselines/${name}/`));
+          store.undo(undoName);
+          console.log(chalk.green(`  ✓ Restored previous baseline for "${undoName}"`));
+          console.log(chalk.gray(`    git add .testivai/baselines/${undoName}/`));
         } catch (err: any) {
           logger.error(err.message);
           process.exit(1);
+        }
+        return;
+      }
+
+      // ── Dry-run mode ──────────────────────────────────────────────────────
+      if (options.dryRun) {
+        if (name) {
+          // Explicit name: verify temp exists
+          if (store.readTemp(name) === null) {
+            logger.error(`No temp screenshot found for "${name}". Run your tests first.`);
+            process.exit(1);
+          }
+          console.log(chalk.cyan(`  would approve: ${name}`));
+          return;
+        }
+        const tempNames = store.listTemp();
+        if (tempNames.length === 0) {
+          console.log(chalk.yellow('  No temp snapshots found. Run your tests first.'));
+          return;
+        }
+        for (const snapName of tempNames) {
+          console.log(chalk.cyan(`  would approve: ${snapName}`));
         }
         return;
       }

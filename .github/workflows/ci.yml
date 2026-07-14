@@ -48,11 +48,11 @@ jobs:
       # sync with src/. This guard fails if a PR changed src/ but forgot
       # to rebuild + commit the dist/. Restricted to a single matrix cell
       # so we don't fight ourselves on cross-OS line endings.
-      - name: Verify action/dist/ is up-to-date
+      - name: Verify action/dist is up to date
         if: matrix.os == 'ubuntu-latest' && matrix.node == '20'
         run: |
-          if ! git diff --quiet -- action/dist/; then
-            echo "::error::action/dist/ is out of sync with src/. Run \`pnpm --filter testivai-action run build\` and commit the result."
+          if ! git diff --exit-code -- action/dist/; then
+            echo "::error::action/dist/ is out of sync with src/. Run \`cd action && npm run build\` and commit the result."
             git --no-pager diff --stat -- action/dist/
             exit 1
           fi

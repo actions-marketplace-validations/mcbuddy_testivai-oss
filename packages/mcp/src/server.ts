@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import { z, type ZodRawShape } from 'zod';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
-import { resolvePaths, readResults, verdictFor, resolveImage, listBaselines } from './lib';
+import { resolvePaths, readResults, verdictFor, resolveImage, listBaselines, downscalePng } from './lib';
 
 const packageJson = require('../package.json');
 
@@ -77,8 +77,16 @@ server.registerTool(
     ] as const) {
       const abs = rel ? resolveImage(paths, rel) : null;
       if (abs) {
-        content.push({ type: 'text', text: `${label}:` });
-        content.push({ type: 'image', data: fs.readFileSync(abs).toString('base64'), mimeType: 'image/png' });
+        const raw = fs.readFileSync(abs);
+        const downscaled = downscalePng(raw);
+        const wasDownscaled =
+          downscaled.originalWidth !== downscaled.width ||
+          downscaled.originalHeight !== downscaled.height;
+        const textLabel = wasDownscaled
+          ? `${label} (downscaled from ${downscaled.originalWidth}x${downscaled.originalHeight}):`
+          : `${label}:`;
+        content.push({ type: 'text', text: textLabel });
+        content.push({ type: 'image', data: downscaled.data.toString('base64'), mimeType: 'image/png' });
       }
     }
     return { content };

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { PNG } from 'pngjs';
 
 /** Subset of the semver-governed results.json contract this server reads. */
 export interface DomInfo {
@@ -86,4 +87,42 @@ export function listBaselines(root: string): string[] {
     .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
     .map((e) => e.name)
     .sort();
+}
+
+/**
+ * Downscale a PNG buffer using integer-stride nearest-neighbour sampling.
+ * When the longest edge is <= maxEdge the original buffer is returned unchanged.
+ *
+ * @returns The (possibly) resized PNG buffer, output dimensions, and original dimensions.
+ */
+export function downscalePng(
+  buffer: Buffer,
+  maxEdge = 1024
+): { data: Buffer; width: number; height: number; originalWidth: number; originalHeight: number } {
+  const original = PNG.sync.read(buffer);
+  const { width: ow, height: oh } = original;
+  const longestEdge = Math.max(ow, oh);
+
+  if (longestEdge <= maxEdge) {
+    return { data: buffer, width: ow, height: oh, originalWidth: ow, originalHeight: oh };
+  }
+
+  const stride = Math.ceil(longestEdge / maxEdge);
+  const w = Math.ceil(ow / stride);
+  const h = Math.ceil(oh / stride);
+
+  const out = new PNG({ width: w, height: h });
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const srcIdx = ((y * stride) * ow + (x * stride)) * 4;
+      const dstIdx = (y * w + x) * 4;
+      out.data[dstIdx] = original.data[srcIdx];
+      out.data[dstIdx + 1] = original.data[srcIdx + 1];
+      out.data[dstIdx + 2] = original.data[srcIdx + 2];
+      out.data[dstIdx + 3] = original.data[srcIdx + 3];
+    }
+  }
+
+  return { data: PNG.sync.write(out), width: w, height: h, originalWidth: ow, originalHeight: oh };
 }

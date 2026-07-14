@@ -1,7 +1,8 @@
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
-import { resolvePaths, readResults, verdictFor, resolveImage, listBaselines } from '../lib';
+import { PNG } from 'pngjs';
+import { resolvePaths, readResults, verdictFor, resolveImage, listBaselines, downscalePng } from '../lib';
 
 describe('@testivai/mcp lib', () => {
   let root: string;
@@ -97,5 +98,84 @@ describe('@testivai/mcp lib', () => {
       fs.mkdirSync(path.join(root, '.testivai', 'baselines', name), { recursive: true });
     }
     expect(listBaselines(root)).toEqual(['a-page', 'b-page']);
+  });
+
+  describe('downscalePng', () => {
+    /**
+     * Create a solid-color PNG of the given dimensions.
+     */
+    const solidPng = (w: number, h: number, r = 255, g = 0, b = 0): Buffer => {
+      const png = new PNG({ width: w, height: h });
+      for (let i = 0; i < png.data.length; i += 4) {
+        png.data[i] = r;
+        png.data[i + 1] = g;
+        png.data[i + 2] = b;
+        png.data[i + 3] = 255;
+      }
+      return PNG.sync.write(png);
+    };
+
+    it('passes through an image that fits within maxEdge unchanged', () => {
+      const buf = solidPng(100, 200);
+      const result = downscalePng(buf, 1024);
+      expect(result.data).toEqual(buf);
+      expect(result.width).toBe(100);
+      expect(result.height).toBe(200);
+      expect(result.originalWidth).toBe(100);
+      expect(result.originalHeight).toBe(200);
+    });
+
+    it('downscales a wide image so longest edge <= maxEdge', () => {
+      const buf = solidPng(3000, 10, 0, 255, 0);
+      const result = downscalePng(buf, 1024);
+      expect(result.width).toBeLessThanOrEqual(1024);
+      expect(result.originalWidth).toBe(3000);
+      expect(result.originalHeight).toBe(10);
+      // Should be roughly 3000/ceil(3000/1024) = 3000/3 = 1000
+      expect(result.width).toBe(1000);
+      expect(result.height).toBe(4); // ceil(10/3) = 4
+    });
+
+    it('downscales a tall image so longest edge <= maxEdge', () => {
+      const buf = solidPng(10, 5000, 0, 0, 255);
+      const result = downscalePng(buf, 1024);
+      expect(result.height).toBeLessThanOrEqual(1024);
+      expect(result.originalWidth).toBe(10);
+      expect(result.originalHeight).toBe(5000);
+    });
+
+    it('reports original dimensions when unchanged', () => {
+      const buf = solidPng(64, 64);
+      const result = downscalePng(buf);
+      expect(result.originalWidth).toBe(64);
+      expect(result.originalHeight).toBe(64);
+      expect(result.width).toBe(64);
+      expect(result.height).toBe(64);
+    });
+
+    it('preserves pixel colour through nearest-neighbour sampling', () => {
+      // Create a 100×1 gradient: R increases across the row
+      const png = new PNG({ width: 100, height: 1 });
+      for (let x = 0; x < 100; x++) {
+        const i = x * 4;
+        png.data[i] = x;        // R varies
+        png.data[i + 1] = 0;
+        png.data[i + 2] = 255 - x;
+        png.data[i + 3] = 255;
+      }
+      const buf = PNG.sync.write(png);
+
+      // Downscale with stride 2 → 50×1
+      const result = downscalePng(buf, 50);
+      expect(result.width).toBe(50);
+      const out = PNG.sync.read(result.data);
+
+      // Pixel at output x=10 comes from input x=20
+      const srcIdx = 20 * 4;
+      const dstIdx = 10 * 4;
+      expect(out.data[dstIdx]).toBe(png.data[srcIdx]);       // R
+      expect(out.data[dstIdx + 1]).toBe(png.data[srcIdx + 1]); // G
+      expect(out.data[dstIdx + 2]).toBe(png.data[srcIdx + 2]); // B
+    });
   });
 });

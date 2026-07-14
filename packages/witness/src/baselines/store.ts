@@ -161,6 +161,29 @@ export class BaselineStore {
   }
 
   /**
+   * Find the baseline name whose `.previous/screenshot.png` has the newest
+   * modification time. Returns null when no baseline has a `.previous/` backup.
+   */
+  findLatestUndoable(): string | null {
+    if (!fs.existsSync(this.baselinesDir)) return null;
+    let latestName: string | null = null;
+    let latestMtime = 0;
+    for (const entry of fs.readdirSync(this.baselinesDir)) {
+      const entryPath = path.join(this.baselinesDir, entry);
+      if (!fs.statSync(entryPath).isDirectory()) continue;
+      const prevScreenshot = path.join(entryPath, '.previous', 'screenshot.png');
+      if (fs.existsSync(prevScreenshot)) {
+        const mtime = fs.statSync(prevScreenshot).mtimeMs;
+        if (mtime > latestMtime) {
+          latestMtime = mtime;
+          latestName = entry;
+        }
+      }
+    }
+    return latestName;
+  }
+
+  /**
    * Undo the last approve by restoring the `.previous/` backup.
    */
   undo(name: string): void {
