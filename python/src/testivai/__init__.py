@@ -1,9 +1,10 @@
 """
 TestivAI for Python — local-first visual regression capture for
-playwright-python, sharing baselines, reports, tolerances, and PR approvals
+playwright-python and Selenium, sharing baselines, reports, tolerances, and PR approvals
 with the JS/TS adapters through one on-disk contract.
 
-    from testivai import witness
+    from testivai import witness                    # playwright-python
+    from testivai.selenium import witness as swit    # Selenium WebDriver
 
     def test_homepage(page):
         page.goto("http://localhost:3000")
@@ -21,9 +22,11 @@ from ._capture import (
     witness,
 )
 from .runner import resolve_cli, run_report
+from .selenium import witness as witness_selenium
 
 __all__ = [
     "witness",
+    "witness_selenium",
     "run_report",
     "resolve_cli",
     "load_local_config",

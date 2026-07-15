@@ -10,7 +10,7 @@
   <packaging>jar</packaging>
 
   <name>TestivAI for Java</name>
-  <description>Local-first visual regression capture for playwright-java — pixel + DOM diff, tunable tolerances, PR approvals; shares baselines with the JS/TS and Python TestivAI adapters</description>
+  <description>Local-first visual regression capture for playwright-java and Selenium — pixel + DOM diff, tunable tolerances, PR approvals; shares baselines with the JS/TS and Python TestivAI adapters</description>
   <url>https://github.com/mcbuddy/testivai-oss</url>
 
   <licenses>
@@ -27,6 +27,15 @@
       <groupId>com.microsoft.playwright</groupId>
       <artifactId>playwright</artifactId>
       <version>1.49.0</version>
+      <scope>provided</scope>
+    </dependency>
+    <!-- Selenium and Playwright are both provided: users bring whichever
+         they use; SeleniumWitness/Witness live in separate classes so the
+         other framework's classes are never loaded. -->
+    <dependency>
+      <groupId>org.seleniumhq.selenium</groupId>
+      <artifactId>selenium-java</artifactId>
+      <version>4.27.0</version>
       <scope>provided</scope>
     </dependency>
     <dependency>

@@ -1,0 +1,201 @@
+/**
+ * @testivai/witness-selenium — capture function
+ *
+ * The user-facing call inside a Selenium (JavaScript) test:
+ *
+ *   import { testivai } from '@testivai/witness-selenium';
+ *   await testivai.witness(driver, 'homepage');
+ *
+ * Captures a screenshot and the page DOM through Selenium's public APIs,
+ * then writes both into `.testivai/temp/<name>/` using the same
+ * BaselineStore layout as every other TestivAI adapter. Run
+ * `npx testivai report` after the tests to compare against baselines.
+ *
+ * Full-page screenshots per browser:
+ *   - Chromium (Chrome/Edge): CDP `Page.captureScreenshot` with
+ *     captureBeyondViewport via `sendAndGetDevToolsCommand` — the same
+ *     mechanism Playwright uses under the hood
+ *   - Firefox/Safari: the JS bindings expose no full-page API, so the
+ *     capture is viewport-only (keep the window sized to what you want
+ *     compared; baselines are consistent run-to-run either way)
+ */
+
+import { BaselineStore, loadLocalConfig } from '@testivai/witness';
+import type { WitnessDriver, WitnessOptions } from './types';
+
+/** id of the style element injected for the duration of a capture */
+const STYLE_ID = '__testivai_capture_css__';
+
+/**
+ * Freezes CSS animations/transitions, hides the caret, and forces instant
+ * scrolling — the top causes of flaky visual diffs. Near-zero durations
+ * (not `none`) let entry animations COMPLETE at their final state.
+ * Mirrors the Playwright adapter's STABILIZE_CSS.
+ */
+const STABILIZE_CSS =
+  '*, *::before, *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; ' +
+  'animation-iteration-count: 1 !important; transition-duration: 0.001s !important; ' +
+  'transition-delay: 0s !important; caret-color: transparent !important; scroll-behavior: auto !important; }';
+
+/** Build the ignoreSelectors CSS block (visibility preserves layout). */
+function buildIgnoreCss(selectors: string[]): string {
+  return selectors.map((s) => `${s} { visibility: hidden !important; }`).join('\n');
+}
+
+async function injectCaptureCss(driver: WitnessDriver, css: string): Promise<boolean> {
+  try {
+    await driver.executeScript(
+      `var el = document.createElement('style');` +
+        `el.id = arguments[0]; el.textContent = arguments[1];` +
+        `document.head.appendChild(el);`,
+      STYLE_ID,
+      css,
+    );
+    return true;
+  } catch {
+    return false; // locked-down page; capture proceeds without stabilization
+  }
+}
+
+async function removeCaptureCss(driver: WitnessDriver): Promise<void> {
+  try {
+    await driver.executeScript(
+      `var el = document.getElementById(arguments[0]); if (el) el.remove();`,
+      STYLE_ID,
+    );
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+/**
+ * Wait (bounded at 10s) for web fonts to finish loading so the capture
+ * never shows a fallback font — a fallback-font capture diffs 30%+.
+ */
+async function waitForFonts(driver: WitnessDriver): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  for (;;) {
+    try {
+      const ready = await driver.executeScript<boolean>(
+        `return document.fonts ? document.fonts.status !== 'loading' : true;`,
+      );
+      if (ready || Date.now() >= deadline) return;
+    } catch {
+      return; // no FontFaceSet or executeScript failed — proceed
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
+
+/**
+ * Full-page screenshot where the driver supports it, viewport otherwise.
+ * Returns a PNG Buffer.
+ */
+async function captureScreenshot(driver: WitnessDriver): Promise<Buffer> {
+  // Chromium drivers expose raw CDP; captureBeyondViewport gives a true
+  // full-page capture without resizing the window (which breaks 100vh
+  // layouts — the reason we never use the resize trick).
+  if (typeof driver.sendAndGetDevToolsCommand === 'function') {
+    try {
+      const result = await driver.sendAndGetDevToolsCommand<{ data?: string }>(
+        'Page.captureScreenshot',
+        { captureBeyondViewport: true, format: 'png' },
+      );
+      if (result && typeof result.data === 'string' && result.data.length > 0) {
+        return Buffer.from(result.data, 'base64');
+      }
+    } catch {
+      // fall through to the viewport screenshot
+    }
+  }
+
+  const base64 = await driver.takeScreenshot();
+  if (typeof base64 !== 'string' || base64.length === 0) {
+    throw new Error('testivai.witness: driver.takeScreenshot() returned an empty value');
+  }
+  return Buffer.from(base64, 'base64');
+}
+
+/**
+ * Capture a screenshot + DOM and write them as a temp snapshot.
+ *
+ * @param driver  selenium-webdriver WebDriver (must expose
+ *   `takeScreenshot()` and `executeScript()`).
+ * @param name    Snapshot name. Becomes the directory under
+ *   `.testivai/temp/<name>/` and the key in the rendered report.
+ * @param options Per-call overrides.
+ */
+export async function witness(
+  driver: WitnessDriver,
+  name: string,
+  options: WitnessOptions = {},
+): Promise<void> {
+  if (!name || typeof name !== 'string') {
+    throw new Error('testivai.witness: snapshot name is required and must be a non-empty string');
+  }
+  if (!driver || typeof driver.takeScreenshot !== 'function') {
+    throw new Error('testivai.witness: driver argument must expose takeScreenshot()');
+  }
+
+  // Multi-browser runs: fold the variant into the name so sessions don't
+  // overwrite each other's baselines (same mechanism as the Playwright
+  // adapter's multi-project handling).
+  if (options.variant) {
+    name = `${name}__${options.variant.replace(/[^a-z0-9_-]+/gi, '_').toLowerCase()}`;
+  }
+
+  // 0. Prepare the page: stabilization CSS (animations/caret/fonts — the
+  //    flake killers) + ignoreSelectors from config.json and this call,
+  //    injected as one style tag and removed after the capture.
+  const localConfig = loadLocalConfig(process.cwd());
+  const stabilize = options.stabilize ?? localConfig.stabilize;
+  const ignoreSelectors = [
+    ...new Set([...(localConfig.ignoreSelectors ?? []), ...(options.ignoreSelectors ?? [])]),
+  ];
+
+  const cssParts: string[] = [];
+  if (stabilize) cssParts.push(STABILIZE_CSS);
+  if (ignoreSelectors.length > 0) cssParts.push(buildIgnoreCss(ignoreSelectors));
+
+  let injected = false;
+  if (cssParts.length > 0 && typeof driver.executeScript === 'function') {
+    injected = await injectCaptureCss(driver, cssParts.join('\n'));
+    if (stabilize) await waitForFonts(driver);
+  }
+
+  // 1. Capture screenshot (full-page on Chromium, viewport elsewhere)
+  let screenshot: Buffer;
+  try {
+    screenshot = await captureScreenshot(driver);
+  } finally {
+    if (injected) await removeCaptureCss(driver);
+  }
+
+  // 2. Capture DOM (best-effort — never break the screenshot path)
+  let dom: string | undefined;
+  if (!options.skipDom && typeof driver.executeScript === 'function') {
+    try {
+      const result = await driver.executeScript<string>(
+        // ignoreSelectors excludes elements from the pixel diff, so they
+        // are excluded from the DOM/text signal too (consistent semantic).
+        `var clone = document.documentElement.cloneNode(true);` +
+          `var sels = arguments[0] || [];` +
+          `for (var i = 0; i < sels.length; i++) {` +
+          ` try { clone.querySelectorAll(sels[i]).forEach(function(el){ el.remove(); }); } catch (e) {}` +
+          `}` +
+          `return clone.outerHTML;`,
+        ignoreSelectors,
+      );
+      if (typeof result === 'string' && result.length > 0) {
+        dom = result;
+      }
+    } catch {
+      // Suppressed by design. DOM capture failure means the noise hint
+      // is unavailable for this snapshot; pixel diff still works.
+    }
+  }
+
+  // 3. Write to .testivai/temp/<name>/
+  const store = new BaselineStore(process.cwd());
+  store.writeTemp(name, screenshot, dom);
+}
