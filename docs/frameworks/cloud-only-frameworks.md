@@ -21,12 +21,9 @@ The hosted TestivAI service supports the full set of frameworks below with first
 |---|---|---|---|
 | Cypress | JavaScript | ✅ | iter 2 |
 | Puppeteer | JavaScript | ✅ | iter 2 |
-| Selenium + Jest | JavaScript | ✅ | community |
-| Selenium + pytest | Python | ✅ | community via [extension API](./../extension-api.md) |
-| Selenium + unittest | Python | ✅ | community |
+| Selenium (any runner) | JavaScript / Python / Java | ✅ | ✅ **native — see [Selenium](./selenium.md)** |
 | Robot Framework | Python | ✅ | sidecar |
-| Selenium + JUnit 5 | Java | ✅ | community |
-| Selenium + TestNG | Java | ✅ | community |
+| Selenium | C# / Ruby | ✅ | sidecar or [extension API](./../extension-api.md) |
 | RSpec + Capybara | Ruby | ✅ | community |
 | Cucumber + Capybara | Ruby | ✅ | community |
 

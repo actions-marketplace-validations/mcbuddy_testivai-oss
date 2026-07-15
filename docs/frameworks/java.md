@@ -11,7 +11,9 @@ capture semantics as every other adapter — compiled and unit-tested in CI
 with `mvn package` for now; feedback and contributions welcome.
 :::
 
-Local-first visual regression for **playwright-java**, sharing baselines,
+Local-first visual regression for **playwright-java and Selenium**
+(`SeleniumWitness.witness(driver, ...)` — see the
+[Selenium guide](./selenium.md)), sharing baselines,
 tolerances, report, and PR approvals with the JS/TS and Python adapters.
 Node.js is required for the compare/report step — playwright-java already
 ships a Node driver.

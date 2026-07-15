@@ -15,8 +15,11 @@ For cloud-only features (REVEAL AI counselor, dashboard, history, team approval,
 Pick the framework you use:
 
 - **[Playwright](./frameworks/playwright.md)** — `@testivai/witness-playwright`
+- **[Selenium](./frameworks/selenium.md)** — native adapters for JS, Python, and Java
 - **[WebdriverIO](./frameworks/webdriverio.md)** — `@testivai/witness-webdriverio` (local mode)
-- **[Cloud-only frameworks](./frameworks/cloud-only-frameworks.md)** — Cypress, Puppeteer, Selenium, Robot, RSpec, Cucumber
+- **[Python](./frameworks/python.md)** — `testivai` on PyPI (playwright-python + Selenium)
+- **[Java](./frameworks/java.md)** — `ai.testiv:testivai` (playwright-java + Selenium, experimental)
+- **[Other frameworks](./frameworks/cloud-only-frameworks.md)** — Cypress, Puppeteer, Robot, RSpec, Cucumber
 
 ## CLI Reference
 

@@ -58,6 +58,7 @@ Live versions are shown by the badges at the top of this README.
 | [`@testivai/witness`](./packages/witness) | Core SDK: CLI, local diffing, baselines, HTML report generator |
 | [`@testivai/witness-playwright`](./packages/playwright) | Playwright reporter/adapter built on top of `@testivai/witness` |
 | [`@testivai/witness-webdriverio`](./packages/webdriverio) | WebdriverIO service + capture function (local mode) |
+| [`@testivai/witness-selenium`](./packages/selenium) | Selenium WebDriver capture adapter (Python/Java Selenium live in `python/` and `java/`) |
 | [`@testivai/mcp`](./packages/mcp) | MCP server — visual results + diff images for AI coding agents |
 | [`testivai` (PyPI)](./python) | Python adapter for playwright-python + pytest plugin — same baselines & report |
 | [`ai.testiv:testivai`](./java) | Java adapter for playwright-java + JUnit 5 extension (experimental) |

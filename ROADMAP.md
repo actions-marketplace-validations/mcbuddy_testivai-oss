@@ -116,13 +116,18 @@ teams that want stricter or looser rasterization tolerance.
   capture + pytest plugin, powered by the new `testivai report` CLI contract
 - **Java adapter** — source complete in `java/` (JUnit 5 extension), experimental
   until Maven Central publish + CI compile 🤝
+- **Selenium adapters** — ✅ SHIPPED natively in all three SDK languages:
+  `@testivai/witness-selenium` (npm), `testivai[selenium]` (Python),
+  `SeleniumWitness` (Java). Full-page via CDP on Chromium; Firefox native
+  full-page in Python/Java. C#/Ruby stay on the sidecar / extension API.
 - **Cypress adapter** — **M** 🤝 planned; adapter interface doc coming so the
   community can own it (same for Puppeteer)
 - **Storybook mode** — decision pending demand (component-story capture loop)
 - **MCP server** — shipped (`@testivai/mcp`); next: image downscaling for
   model-context friendliness, and an opt-in `run_visual_tests` tool
-- **`testivai run` sidecar** — remains experimental; graduates only if
-  non-JS-framework demand shows up in issues
+- **`testivai run` sidecar** — remains experimental, now only needed for
+  bindings without a native adapter (C#, Ruby); graduates only if demand
+  shows up in issues
 
 ---
 

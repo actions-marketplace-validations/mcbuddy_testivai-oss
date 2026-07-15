@@ -4,13 +4,18 @@ title: Python (playwright-python)
 
 # Python adapter — `testivai` on PyPI
 
-Local-first visual regression for **playwright-python**, sharing the same
-baselines, tolerances, report, and PR approval flow as the JS/TS adapters —
-one on-disk contract across languages.
+Local-first visual regression for **playwright-python and Selenium**,
+sharing the same baselines, tolerances, report, and PR approval flow as the
+JS/TS adapters — one on-disk contract across languages.
 
 ```bash
-pip install testivai[playwright]
+pip install testivai[playwright]   # or testivai[selenium]
 ```
+
+Using Selenium? `from testivai.selenium import witness` — see the
+[Selenium guide](./selenium.md). The rest of this page covers
+playwright-python; config, the pytest plugin, and the report flow are
+identical for both.
 
 Node.js is required for the compare/report step, and it's already there:
 Playwright for Python ships its own Node driver.
