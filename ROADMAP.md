@@ -45,11 +45,13 @@ vibe-coded apps (Lovable, Bolt, v0) that ship without tests. Still open:
 - viewport matrix per page (blocked on baseline keying, 1.1)
 - `waitForStable` frame-compare for JS-animated pages 🤝
 
-### 2.1 Locator masking parity — **S**
-`ignoreSelectors` (CSS `visibility:hidden`, layout-preserving) is our
-mechanism — now supported in **both** adapters (WebdriverIO gained global +
-per-call support alongside stabilization). Playwright users also expect
-`mask: [locator]` per call; accept locators in `witness()` options and translate.
+### 2.1 Masking — ✅ SHIPPED (witness 1.4.0)
+Full masking DSL: config + per-call `mask` accepting CSS selectors
+(geometry captured at capture time) or geometric regions (px, 0–1 ratios,
+"NN%", edge shorthands like `{ top: 24 }`). Masked areas are excluded from
+the diff AND hatched in the diff image with a full audit trail — never
+silent. `ignoreSelectors` (capture-time hiding) stays for content that
+should never be captured; `docs/comparison.md` explains which to use when.
 
 ### 2.2 Element-level snapshots — **M**
 `witness(page.locator('.card'), ...)` for component-scoped baselines.
@@ -81,20 +83,22 @@ flip-flops across recent runs and badge them "flaky" in the report.
 
 ## 3. Detection depth
 
-### 3.1 Computed-style fingerprint — **L**, the headline item
-The known gap: a stylesheet-only change (identical DOM, different pixels)
-currently earns a "likely render noise" hint — a false negative on the exact
-signal we ask users to trust. Plan: per-element digest of computed styles
-captured alongside the DOM snapshot; noise hint only fires when DOM **and**
-style digests both match. Tracked publicly; our benchmark repo documents the
-failure case this closes.
+### 3.1 Computed-style fingerprint — ✅ SHIPPED (witness 1.6.0)
+The documented false negative, closed: captures carry a per-element
+computed-style digest (fixed property list), and the noise hint fires only
+when DOM **and** style digests both match. A stylesheet-only change now
+reads as an attributed "Styles changed" signal (`dom.styleCheck`,
+`dom.styleChanges` in results.json) that `noiseAutoPass` can never
+auto-pass. The benchmark failure case is a permanent regression test.
 
-### 3.2 Diff region → element attribution — **L**, the differentiator
-We already store the DOM for every capture and layout data exists in the
-schema. Cluster changed-pixel regions, intersect with element bounding
-boxes, and report *which elements* changed: "`.pricing-card:nth-child(2)`
-moved 24px down". No local-first tool does this; it's also the single most
-useful output for an AI agent deciding whether its change was intended.
+### 3.2 Diff region → element attribution — ✅ SHIPPED (witness 1.5.0)
+Changed-pixel regions are clustered and intersected with the capture-time
+element map: the report says *which element* changed —
+"`div.card:nth-of-type(2)` shifted +8px vertically — content unchanged" —
+with exact (dx, dy) derived from layout, and a whole-page `pageShift`
+signal for the injected-banner case. No local-first tool does this; it's
+also the single most useful output for an AI agent deciding whether its
+change was intended (see `docs/guides/ai-agents.md`).
 
 ### 3.3 Cross-browser validation — ✅ SHIPPED
 Nothing in the capture path is Chromium-specific (native Playwright APIs
