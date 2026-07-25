@@ -10,7 +10,7 @@ import {
   generateConfig,
   generateCypressConfig,
 } from '../utils/template-generator';
-import { createDefaultConfig } from '../config/local-config';
+import { createDefaultConfig, localConfigExists } from '../config/local-config';
 
 const LANGUAGE_CHOICES = [
   { name: 'JavaScript / TypeScript', value: 'javascript' },
@@ -69,7 +69,7 @@ const NEXT_STEPS: Record<string, string[]> = {
   'cucumber-capybara': ['1. npx testivai auth <your-api-key>', '2. Use the "page looks correct" step in features', '3. npx testivai run "bundle exec cucumber"'],
 };
 
-function isPlaywrightProject(cwd: string): boolean {
+export function isPlaywrightProject(cwd: string): boolean {
   const pkgPath = path.join(cwd, 'package.json');
   if (!fs.existsSync(pkgPath)) return false;
   try {
@@ -83,6 +83,48 @@ function isPlaywrightProject(cwd: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Scaffold a Playwright + local-mode project: `.testivai/config.json`
+ * (mode: local), the baselines directory, and the .gitignore entries.
+ *
+ * This is the local-first, no-account setup — deliberately NOT the CDP
+ * `browserPort` sidecar config, which does not apply to the Playwright
+ * reporter flow. Idempotent: an existing config is left untouched unless
+ * `force` is set. Returns the list of paths created/updated.
+ */
+export function scaffoldPlaywrightLocal(cwd: string, force = false): string[] {
+  const created: string[] = [];
+
+  if (force || !localConfigExists(cwd)) {
+    createDefaultConfig(cwd, { mode: 'local' });
+    created.push('.testivai/config.json');
+  }
+
+  // Race-free: mkdir recursive never throws on an existing dir and returns the
+  // first path it created (undefined if it already existed) — no check-then-act.
+  const baselinesDir = path.join(cwd, '.testivai', 'baselines');
+  if (fs.mkdirSync(baselinesDir, { recursive: true })) {
+    created.push('.testivai/baselines/');
+  }
+
+  // Race-free: read-or-empty instead of exists-then-read; appendFileSync
+  // creates the file when it's absent, so no separate write branch is needed.
+  const gitignorePath = path.join(cwd, '.gitignore');
+  const block = '\n# TestivAI local mode\n.testivai/temp/\nvisual-report/\n';
+  let existing = '';
+  try {
+    existing = fs.readFileSync(gitignorePath, 'utf-8');
+  } catch {
+    existing = '';
+  }
+  if (!existing.includes('.testivai/temp/')) {
+    fs.appendFileSync(gitignorePath, block);
+    created.push('.gitignore');
+  }
+
+  return created;
 }
 
 function printBox(lines: string[]): void {
@@ -102,6 +144,35 @@ export const initCommand = new Command('init')
   .action(async (options) => {
     try {
       const cwd = process.cwd();
+
+      // ── Playwright projects: dedicated reporter + local mode ──────────────
+      // Detect FIRST — before --yes / framework detection — so a Playwright
+      // repo always gets the reporter flow and .testivai/config.json, never
+      // the CDP browserPort sidecar config.
+      if (isPlaywrightProject(cwd)) {
+        const created = scaffoldPlaywrightLocal(cwd, options.force ?? false);
+        console.log();
+        console.log(chalk.green.bold('  ✓ TestivAI is set up for Playwright (local mode).'));
+        if (created.length > 0) {
+          created.forEach((f) => console.log(chalk.green(`  ✓ ${f}`)));
+        } else {
+          console.log(chalk.gray('  (already configured — nothing to change)'));
+        }
+        console.log();
+        console.log(chalk.cyan('  1. Add the reporter to playwright.config.ts:'));
+        console.log(chalk.gray('       reporter: [') + chalk.white("['list'], ['@testivai/witness-playwright/reporter']") + chalk.gray('],'));
+        console.log();
+        console.log(chalk.cyan('  2. Capture a snapshot in a test:'));
+        console.log(chalk.gray("       import { snapshot } from '@testivai/witness-playwright';"));
+        console.log(chalk.gray("       await snapshot(page, testInfo, 'homepage');"));
+        console.log();
+        console.log(chalk.cyan('  3. Run, review, approve:'));
+        console.log(chalk.gray('       npx playwright test'));
+        console.log(chalk.gray('       open visual-report/index.html'));
+        console.log(chalk.gray('       npx testivai approve --all   # then commit .testivai/baselines/'));
+        console.log();
+        return; // exit 0
+      }
 
       // ── Auto-detect mode (--yes flag) ─────────────────────────────────────
       if (options.yes) {
@@ -125,18 +196,6 @@ export const initCommand = new Command('init')
 ${chalk.gray('For more information, see: https://docs.testiv.ai')}
         `);
         logger.success('Initialization complete!');
-        return;
-      }
-
-      // ── Playwright early-exit ──────────────────────────────────────────────
-      if (isPlaywrightProject(cwd)) {
-        console.log();
-        console.log(chalk.yellow('⚠  Playwright detected in this project.'));
-        console.log();
-        console.log('For Playwright, use the dedicated SDK instead:');
-        console.log(chalk.cyan('  npm install @testivai/witness-playwright'));
-        console.log(chalk.gray('  Docs: https://testiv.ai/docs#playwright'));
-        console.log();
         return;
       }
 
