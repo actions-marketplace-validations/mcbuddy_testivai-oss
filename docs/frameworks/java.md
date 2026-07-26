@@ -5,7 +5,7 @@ title: Java (playwright-java)
 # Java adapter — `ai.testiv:testivai` (experimental)
 
 :::warning Experimental
-The Java adapter ships full source in [`java/`](../../java) with the same
+The Java adapter ships full source in [`java/`](https://github.com/mcbuddy/testivai-oss/tree/main/java) with the same
 capture semantics as every other adapter — compiled and unit-tested in CI
 (JUnit 5 + Mockito) — but is not yet published to Maven Central. Build it
 with `mvn package` for now; feedback and contributions welcome.
