@@ -6,13 +6,13 @@
     "url": "https://github.com/mcbuddy/testivai-oss",
     "source": "github"
   },
-  "version": "0.5.3",
+  "version": "0.5.4",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@testivai/mcp",
-      "version": "0.5.3",
+      "version": "0.5.4",
       "transport": {
         "type": "stdio"
       }
