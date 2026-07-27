@@ -136,9 +136,10 @@ teams that want stricter or looser rasterization tolerance.
 
 ---
 
-**What we will not build in OSS:** hosted dashboards, cross-run history,
-team approval workflows — that's the [cloud lane](./docs/oss-vs-cloud.md).
-Detection improvements always land in OSS.
+**What we deliberately don't build:** a hosted service, dashboards, or
+anything that needs an account — TestivAI is local-first by
+[philosophy](./docs/philosophy.md). Collaboration happens through git
+(committed baselines), the PR workflow, and shareable single-file reports.
 
 Have a need that isn't here? [Open an issue](https://github.com/mcbuddy/testivai-oss/issues) —
 adoption stories with concrete pain move items up this list.

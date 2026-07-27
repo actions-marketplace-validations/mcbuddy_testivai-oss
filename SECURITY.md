@@ -46,12 +46,11 @@ In scope:
 - Published npm packages listed above
 - The `testivai-action` GitHub Action
 
-Out of scope (please report to the cloud service team separately):
+Out of scope:
 
-- The TestivAI hosted service (`*.testiv.ai`)
-- The TestivAI Dashboard
+- The testiv.ai website (static marketing/docs pages — no user data is processed there)
 - Issues in third-party dependencies (please report upstream first)
-- Social engineering, physical attacks, denial-of-service against TestivAI infrastructure
+- Social engineering or physical attacks
 
 ## Safe Harbor
 

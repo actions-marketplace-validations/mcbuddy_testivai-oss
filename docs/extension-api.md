@@ -67,7 +67,7 @@ That's the entire contract for capture. After the test run, the user invokes `np
 
 ```jsonc
 {
-  "mode": "local",            // "local" or "cloud"
+  "mode": "local",            // "local" (default; "cloud" is a retired legacy value)
   "threshold": 0.1,           // pixel diff threshold (0–1)
   "reportDir": "visual-report",
   "autoOpen": false,          // open report in a browser after generation
