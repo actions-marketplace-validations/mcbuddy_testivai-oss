@@ -1,7 +1,7 @@
 # testivai-oss — Claude Code Guide
 
 This is the public open-source repository for the TestivAI SDKs.
-All packages here enable **fully local visual regression testing** with no cloud account required.
+All packages here enable **fully local visual regression testing** — no account, no API key, no server.
 
 ## Repo layout
 
@@ -154,12 +154,10 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
 }
 ```
 
-## Terminology firewall
+## Terminology
 
-- **OSS terms**: pixel diff, DOM diff, noise hint, local mode, baselines, threshold
-- **Cloud terms**: REVEAL, 5-layer, AI counselor, smart baselines, dashboard
-- Never use cloud terminology in OSS package docs/code.
-- The OSS/cloud capability boundary is defined in `docs/oss-vs-cloud.md` (detection local, collaboration cloud); consult it before adding comparison layers to either lane.
+- Core vocabulary: pixel diff, DOM diff, noise hint, layered analysis, baselines, threshold, heatmap.
+- TestivAI is **local-first and OSS-only** — there is no hosted service. Never reference a cloud product, dashboard, account, or API key in docs or code; AI-powered explanation is bring-your-own-model via `@testivai/mcp` (`explain_snapshot`). See `docs/philosophy.md`.
 
 ## PR conventions
 

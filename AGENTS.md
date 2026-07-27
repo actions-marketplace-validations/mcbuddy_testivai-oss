@@ -11,8 +11,7 @@ For task recipes, see `SKILLS.md`.
 ## What this repo is
 
 The public open-source home for the TestivAI visual regression SDKs.
-Everything here runs **fully locally** — no cloud account, no API key required.
-An optional cloud upgrade path exists but is never surfaced in OSS code.
+Everything here runs **fully locally** — no account, no API key, no server.
 
 ---
 
@@ -21,9 +20,10 @@ An optional cloud upgrade path exists but is never surfaced in OSS code.
 1. **pnpm only.** Never run `npm install` or `yarn` in the workspace root or any package.
    The only exception is inside `action/` (the GitHub Action), which uses plain `npm`.
 
-2. **Terminology firewall.** OSS code and docs must never mention: REVEAL, 5-layer analysis,
-   AI counselor, smart baselines, CSS fingerprinting, or the cloud dashboard.
-   Allowed terms: pixel diff, DOM diff, noise hint, local mode, baselines, threshold.
+2. **Local-first, OSS-only.** There is no hosted service. Never reference a cloud
+   product, dashboard, account, or API key in docs or code. AI explanation is
+   bring-your-own-model via `@testivai/mcp` (`explain_snapshot`).
+   Core vocabulary: pixel diff, DOM diff, noise hint, layered analysis, baselines, threshold.
 
 3. **`action/dist/index.js` must always be committed.** After any change to `action/src/`,
    rebuild with `cd action && npm run build` and commit the updated `dist/index.js`.

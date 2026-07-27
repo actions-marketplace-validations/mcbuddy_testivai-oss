@@ -103,7 +103,7 @@ export function resolveImage(paths: ProjectPaths, relativePath: string): string 
 
 /**
  * Layered evidence bundle for one snapshot — the input a client LLM turns
- * into a REVEAL-style narrative ("card #2 shifted +24px — likely the banner
+ * into a human-quality narrative ("card #2 shifted +24px — likely the banner
  * injected above it"). Assembled entirely from signals already computed by
  * the local diff pipeline; the server ships evidence, the client's model is
  * the analysis layer.
