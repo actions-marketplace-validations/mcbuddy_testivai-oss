@@ -1,19 +1,21 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-09-29/server.schema.json",
   "name": "ai.testiv/mcp",
-  "description": "Visual regression results for AI coding agents: per-snapshot verdicts (pixel diff + DOM/text signal), baseline/current/diff images, committed baselines. Local-first, no account or API key.",
+  "description": "Local-first visual regression for AI agents: verdicts, diff images, explain_snapshot. No API key.",
   "repository": {
     "url": "https://github.com/mcbuddy/testivai-oss",
     "source": "github"
   },
-  "version": "0.3.0",
+  "version": "0.5.2",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@testivai/mcp",
-      "version": "0.3.0",
-      "transport": { "type": "stdio" }
+      "version": "0.5.2",
+      "transport": {
+        "type": "stdio"
+      }
     }
   ]
 }
