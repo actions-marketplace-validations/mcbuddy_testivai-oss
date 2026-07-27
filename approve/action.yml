@@ -33,11 +33,12 @@ inputs:
 
   workflow:
     description: >
-      Filename of the workflow (in .github/workflows/) that runs the visual
-      regression tests and uploads the report artifact. Must match the
-      workflow that contains the mcbuddy/testivai-oss@v1 reporter step.
+      Optional filename of the workflow (in .github/workflows/) that runs the
+      visual regression tests. When omitted, the newest completed run on the
+      PR branch that produced the report artifact is auto-detected — which is
+      the right behavior for almost everyone.
     required: false
-    default: 'playwright-oss.yml'
+    default: ''
 
 runs:
   using: 'composite'
@@ -123,21 +124,37 @@ runs:
       run: |
         set -euo pipefail
 
-        echo "Looking for latest '$WORKFLOW_FILE' run on branch: $PR_BRANCH"
-
-        # Find the most recent completed visual regression run for this branch.
-        # Filter by workflow file so we don't accidentally pick a CI Tests run
-        # which has no visual-report artifact.
-        RUN_ID=$(gh run list \
-          --repo     "$GITHUB_REPOSITORY" \
-          --branch   "$PR_BRANCH" \
-          --workflow "$WORKFLOW_FILE" \
-          --limit    10 \
-          --json     databaseId,conclusion \
-          --jq       '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[0].databaseId // empty')
+        if [ -n "$WORKFLOW_FILE" ]; then
+          echo "Looking for latest '$WORKFLOW_FILE' run on branch: $PR_BRANCH"
+          RUN_ID=$(gh run list \
+            --repo     "$GITHUB_REPOSITORY" \
+            --branch   "$PR_BRANCH" \
+            --workflow "$WORKFLOW_FILE" \
+            --limit    10 \
+            --json     databaseId,conclusion \
+            --jq       '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[0].databaseId // empty')
+        else
+          # No workflow filename given: auto-detect the newest completed run
+          # on the branch that actually produced the visual-report artifact —
+          # works regardless of what the consumer named their workflow file.
+          echo "Auto-detecting the latest run with artifact '$ARTIFACT_NAME' on branch: $PR_BRANCH"
+          RUN_ID=""
+          for id in $(gh run list \
+              --repo   "$GITHUB_REPOSITORY" \
+              --branch "$PR_BRANCH" \
+              --limit  15 \
+              --json   databaseId,conclusion \
+              --jq     '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[].databaseId'); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts" \
+                 --jq '.artifacts[].name' | grep -qx "$ARTIFACT_NAME"; then
+              RUN_ID="$id"
+              break
+            fi
+          done
+        fi
 
         if [ -z "$RUN_ID" ]; then
-          echo "::error::No completed '$WORKFLOW_FILE' run found for branch '$PR_BRANCH'. Run the visual regression tests first, or set the 'workflow' input to your visual regression workflow filename."
+          echo "::error::No completed run with artifact '$ARTIFACT_NAME' found for branch '$PR_BRANCH'. Run the visual regression tests first (the reporter step must have upload-artifact enabled)."
           exit 1
         fi
 
