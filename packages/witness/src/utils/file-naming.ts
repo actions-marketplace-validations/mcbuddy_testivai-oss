@@ -24,7 +24,7 @@ export function toSafeFilename(name: string): string {
   }
 
   // Replace spaces and common separators with hyphens
-  filename = filename.replace(/[\s_\/\\]+/g, '-');
+  filename = filename.replace(/[\s_/\\]+/g, '-');
 
   // Remove invalid filename characters (Windows-safe)
   // Keep: letters, numbers, hyphens, dots, underscores, parentheses
@@ -33,8 +33,14 @@ export function toSafeFilename(name: string): string {
   // Replace multiple consecutive hyphens with single hyphen
   filename = filename.replace(/-+/g, '-');
 
-  // Remove leading/trailing hyphens and dots
-  filename = filename.replace(/^[-\.]+|[-\.]+$/g, '');
+  // Remove leading/trailing hyphens and dots. Trimmed with index scans
+  // rather than /^[-.]+|[-.]+$/ — the anchored-alternation regex is
+  // polynomial on adversarial inputs (CodeQL js/polynomial-redos).
+  let start = 0;
+  let end = filename.length;
+  while (start < end && (filename[start] === '-' || filename[start] === '.')) start++;
+  while (end > start && (filename[end - 1] === '-' || filename[end - 1] === '.')) end--;
+  filename = filename.slice(start, end);
 
   // Limit length (255 is max for most filesystems, leave room for extension)
   if (filename.length > 200) {
@@ -93,7 +99,7 @@ export function extractNameFromUrl(url: string): string {
     return lastSegment || 'page';
   } catch {
     // If URL parsing fails, extract from string
-    const matches = url.match(/\/([^\/]+)\/?$/);
+    const matches = url.match(/\/([^/]+)\/?$/);
     return matches ? matches[1] : 'page';
   }
 }
@@ -113,7 +119,8 @@ export function sanitizeTestName(name: string): string {
   // Replace multiple spaces with single space
   testName = testName.replace(/\s+/g, ' ');
 
-  // Remove control characters
+  // Remove control characters — the control-character class is the point here
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: sanitizing them is this function's job
   testName = testName.replace(/[\x00-\x1F\x7F]/g, '');
 
   // Limit length
