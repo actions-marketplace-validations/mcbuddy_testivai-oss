@@ -1,16 +1,12 @@
 {
   "name": "@testivai/witness-playwright",
-  "version": "1.2.1",
-  "description": "Playwright sensor for Testivai Visual Regression Test system",
+  "version": "2.0.1",
+  "description": "Playwright adapter for TestivAI Witness — local-first visual regression with pixel + DOM comparison",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "bin": {
-    "testivai": "dist/cli/index.js"
-  },
   "exports": {
     ".": "./dist/index.js",
-    "./reporter": "./dist/reporter-entry.js",
-    "./cli": "./dist/cli/index.js"
+    "./reporter": "./dist/reporter-entry.js"
   },
   "scripts": {
     "build": "tsc",
@@ -20,20 +16,24 @@
   "keywords": [
     "playwright",
     "visual-regression",
-    "testing",
-    "testivai"
+    "visual-testing",
+    "screenshot-testing",
+    "regression-testing",
+    "testivai",
+    "playwright-reporter",
+    "test-automation"
   ],
   "author": "TestivAI",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mcbuddy/testivai-oss.git",
+    "url": "git+https://github.com/testivai/testivai-oss.git",
     "directory": "packages/playwright"
   },
   "bugs": {
-    "url": "https://github.com/mcbuddy/testivai-oss/issues"
+    "url": "https://github.com/testivai/testivai-oss/issues"
   },
-  "homepage": "https://github.com/mcbuddy/testivai-oss/tree/main/packages/playwright#readme",
+  "homepage": "https://github.com/testivai/testivai-oss/tree/main/packages/playwright#readme",
   "publishConfig": {
     "access": "public"
   },
@@ -49,23 +49,17 @@
     "@playwright/test": ">=1.40.0"
   },
   "dependencies": {
-    "@testivai/common": "workspace:*",
     "@testivai/witness": "workspace:*",
-    "axios": "^1.16.1",
-    "chalk": "^4.1.2",
-    "commander": "^14.0.3",
-    "cross-fetch": "^4.0.0",
-    "fs-extra": "^11.3.5",
-    "sharp": "^0.34.5",
-    "simple-git": "^3.21.0"
+    "fs-extra": "^11.4.0",
+    "sharp": "^0.35.3"
   },
   "devDependencies": {
-    "@playwright/test": "^1.60.0",
+    "@playwright/test": "^1.62.1",
     "@types/fs-extra": "^11.0.4",
     "@types/jest": "^30.0.0",
     "@types/node": "^20.10.0",
-    "jest": "^30.2.0",
-    "ts-jest": "^29.4.11",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
     "ts-node": "^10.9.0",
     "typescript": "^6.0.3"
   }

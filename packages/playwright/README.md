@@ -25,7 +25,6 @@ npm install -D @testivai/witness-playwright
      reporter: [
        ['line'],
        ['@testivai/witness-playwright/reporter', {
-         // No API key needed for local mode!
        }]
      ],
    });
@@ -34,11 +33,11 @@ npm install -D @testivai/witness-playwright
 3. **Capture snapshots in your tests**
    ```typescript
    import { test, expect } from '@playwright/test';
-   import { snapshot } from '@testivai/witness-playwright';
+   import { witness } from '@testivai/witness-playwright';
 
    test('homepage visual', async ({ page }, testInfo) => {
      await page.goto('https://example.com');
-     await snapshot(page, testInfo, 'homepage');
+     await witness(page, testInfo, 'homepage');
    });
    ```
 
@@ -57,43 +56,29 @@ npm install -D @testivai/witness-playwright
 
 ## Configuration
 
-### Local Mode (Default)
-
-No configuration needed! Just run `npx testivai init` and select "Local Mode".
-
-### Cloud Mode
-
-For team dashboards and collaboration:
-
-```typescript
-// playwright.config.ts
-export default defineConfig({
-  reporter: [
-    ['line'],
-    ['@testivai/witness-playwright/reporter', {
-      apiKey: process.env.TESTIVAI_API_KEY,
-    }]
-  ],
-});
-```
+No configuration needed — `npx testivai init` scaffolds `.testivai/config.json`,
+the baselines directory, and the `.gitignore` entries. Everything runs locally.
 
 ## API Reference
 
-### `snapshot(page, testInfo, name?, config?)`
+### `witness(page, testInfo, name?, config?)`
 
 Capture a visual snapshot of the current page.
 
 ```typescript
-import { snapshot } from '@testivai/witness-playwright';
+import { witness } from '@testivai/witness-playwright';
 
 // Basic usage
-await snapshot(page, testInfo, 'my-snapshot');
+await witness(page, testInfo, 'my-snapshot');
 
-// With custom config
-await snapshot(page, testInfo, 'checkout-page', {
-  threshold: 0.05,  // 5% difference tolerance
-  fullPage: true,   // Capture full page
+// With per-snapshot overrides
+await witness(page, testInfo, 'checkout-page', {
+  ignoreSelectors: ['.live-chat', '[data-testid=clock]'], // hidden for this capture
+  stabilize: false, // opt out of animation-freeze + font-wait for this snapshot
 });
+
+// Diff tolerances (maxDiffPercent, noiseAutoPass, ...) are project-level:
+// set them in .testivai/config.json — see the repository README.
 ```
 
 ## CI/CD Integration
@@ -128,6 +113,6 @@ MIT
 
 ## Support
 
-- Documentation: https://github.com/mcbuddy/testivai-oss/tree/main/packages/playwright
-- Issues: https://github.com/mcbuddy/testivai-oss/issues
+- Documentation: https://github.com/testivai/testivai-oss/tree/main/packages/playwright
+- Issues: https://github.com/testivai/testivai-oss/issues
 - Website: https://testiv.ai

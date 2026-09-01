@@ -1,6 +1,6 @@
 # @testivai/witness-webdriverio
 
-WebdriverIO adapter for [TestivAI Witness](https://github.com/mcbuddy/testivai-oss) — local-first visual regression testing with pixel + DOM comparison. No account required.
+WebdriverIO adapter for [TestivAI Witness](https://github.com/testivai/testivai-oss) — local-first visual regression testing with pixel + DOM comparison. No account required.
 
 Pairs with `@testivai/witness` (the local CLI + diff engine + HTML report) and shares the `.testivai/baselines/` layout used by `@testivai/witness-playwright`. Switching between Playwright and WebdriverIO produces the same baselines, the same report, and the same approval workflow.
 
@@ -24,14 +24,17 @@ Create `.testivai/config.json` at your project root:
 
 ```json
 {
-  "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
-  "autoOpen": false
+  "autoOpen": false,
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
-This file is the local-mode marker. Without it, the adapter logs a warning and skips report generation (cloud mode upload is not yet implemented for WDIO).
+This file is required — it is the marker the service looks for. Without it, the adapter logs a warning and skips report generation.
 
 ### 2. Register the service in `wdio.conf.ts`
 
@@ -113,6 +116,8 @@ Captures a screenshot + DOM and writes them as a temp snapshot.
 | `browser` | WebdriverIO browser | Must expose `takeScreenshot()` and (for DOM) `execute()`. |
 | `name` | string | Snapshot name. Becomes `.testivai/temp/<name>/` and the key in the report. |
 | `options.skipDom` | boolean | Skip DOM capture for this snapshot. |
+| `options.ignoreSelectors` | string[] | Elements hidden (`visibility: hidden`) for this capture; merged with the global `ignoreSelectors` from `.testivai/config.json`. |
+| `options.stabilize` | boolean | Override capture stabilization (animations frozen, caret hidden, fonts awaited). Default: `true` (or the global `stabilize` setting). |
 
 ### `TestivaiService`
 
@@ -129,13 +134,11 @@ Class registered as a WDIO service. Implements `onComplete`.
 ## Status
 
 - **Local mode**: stable
-- **Cloud mode** (upload to TestivAI hosted): not yet implemented in this adapter — coming in a later iteration. The Playwright adapter has both lanes today; the WDIO adapter will follow once local is broadly used.
 
 ## Links
 
-- Repo: https://github.com/mcbuddy/testivai-oss
-- Plan: see `docs/OSS_PLAN_V3.md` in `mcbuddy/testivai-monorepo`
-- Issues: https://github.com/mcbuddy/testivai-oss/issues
+- Repo: https://github.com/testivai/testivai-oss
+- Issues: https://github.com/testivai/testivai-oss/issues
 
 ## License
 

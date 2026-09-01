@@ -175,7 +175,7 @@ Post a comment on the PR:
 ```
 
 **What happens:**
-1. The `mcbuddy/testivai-oss/approve@v1` action verifies you have write access
+1. The `testivai/testivai-oss/approve@v1` action verifies you have write access
 2. Downloads the `testivai-visual-report` artifact from the latest CI run
 3. Copies approved screenshots into `.testivai/baselines/`
 4. Commits them to your PR branch
@@ -266,11 +266,11 @@ All four must pass before the PR is opened. CI enforces the same checks.
 
 **When:** Changing default threshold, report directory, or adding a new config field.
 
-Key file: `packages/common/src/config.ts` (or equivalent config loader).
+Key file: `packages/witness/src/config/local-config.ts` (the `LocalConfig` type and defaults).
 
 After changing defaults:
 - Update the `results.json` schema comment in `AGENTS.md` and `CLAUDE.md` if the shape changes
-- Add a changeset for `@testivai/common` at the appropriate bump level
+- Add a changeset for `@testivai/witness` at the appropriate bump level
 - Update `docs/` if the field is user-facing
 
 ---

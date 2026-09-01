@@ -27,9 +27,18 @@ inputs:
     description: >
       Name of the workflow artifact that contains the visual report and
       pending baselines. Must match the artifact-name used in the
-      mcbuddy/testivai-oss@v1 reporter step.
+      testivai/testivai-oss@v1 reporter step.
     required: false
     default: 'testivai-visual-report'
+
+  workflow:
+    description: >
+      Optional filename of the workflow (in .github/workflows/) that runs the
+      visual regression tests. When omitted, the newest completed run on the
+      PR branch that produced the report artifact is auto-detected — which is
+      the right behavior for almost everyone.
+    required: false
+    default: ''
 
 runs:
   using: 'composite'
@@ -73,7 +82,7 @@ runs:
               owner:        context.repo.owner,
               repo:         context.repo.repo,
               issue_number: context.issue.number,
-              body: `⛔ @${context.actor} — only collaborators with **write** access can approve visual baselines.`,
+              body: `@${context.actor} — only collaborators with **write** access can approve visual baselines.`,
             });
             return { skip: true };
           }
@@ -110,25 +119,42 @@ runs:
       env:
         GH_TOKEN:       ${{ inputs.github-token }}
         ARTIFACT_NAME:  ${{ inputs.artifact-name }}
+        WORKFLOW_FILE:  ${{ inputs.workflow }}
         PR_BRANCH:      ${{ fromJson(steps.auth.outputs.result).branch }}
       run: |
         set -euo pipefail
 
-        echo "Looking for latest TestivAI OSS run on branch: $PR_BRANCH"
-
-        # Find the most recent completed OSS Visual Regression run for this branch
-        # Filter by workflowName so we don't accidentally pick a CI Tests run
-        # which has no visual-report artifact.
-        RUN_ID=$(gh run list \
-          --repo     "$GITHUB_REPOSITORY" \
-          --branch   "$PR_BRANCH" \
-          --workflow "playwright-oss.yml" \
-          --limit    10 \
-          --json     databaseId,conclusion \
-          --jq       '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[0].databaseId // empty')
+        if [ -n "$WORKFLOW_FILE" ]; then
+          echo "Looking for latest '$WORKFLOW_FILE' run on branch: $PR_BRANCH"
+          RUN_ID=$(gh run list \
+            --repo     "$GITHUB_REPOSITORY" \
+            --branch   "$PR_BRANCH" \
+            --workflow "$WORKFLOW_FILE" \
+            --limit    10 \
+            --json     databaseId,conclusion \
+            --jq       '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[0].databaseId // empty')
+        else
+          # No workflow filename given: auto-detect the newest completed run
+          # on the branch that actually produced the visual-report artifact —
+          # works regardless of what the consumer named their workflow file.
+          echo "Auto-detecting the latest run with artifact '$ARTIFACT_NAME' on branch: $PR_BRANCH"
+          RUN_ID=""
+          for id in $(gh run list \
+              --repo   "$GITHUB_REPOSITORY" \
+              --branch "$PR_BRANCH" \
+              --limit  15 \
+              --json   databaseId,conclusion \
+              --jq     '[.[] | select(.conclusion != null and .conclusion != "cancelled")] | .[].databaseId'); do
+            if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$id/artifacts" \
+                 --jq '.artifacts[].name' | grep -qx "$ARTIFACT_NAME"; then
+              RUN_ID="$id"
+              break
+            fi
+          done
+        fi
 
         if [ -z "$RUN_ID" ]; then
-          echo "::error::No completed workflow run found for branch '$PR_BRANCH'. Run the visual regression tests first."
+          echo "::error::No completed run with artifact '$ARTIFACT_NAME' found for branch '$PR_BRANCH'. Run the visual regression tests first (the reporter step must have upload-artifact enabled)."
           exit 1
         fi
 
@@ -158,7 +184,7 @@ runs:
 
         if [ ! -d "$PENDING_DIR" ]; then
           echo "::error::No pending-baselines found in the artifact."
-          echo "Make sure you are using mcbuddy/testivai-oss@v1 (v1.0.2+) with upload-artifact: true."
+          echo "Make sure you are using testivai/testivai-oss@v1 (v1.0.2+) with upload-artifact: true."
           exit 1
         fi
 
@@ -244,7 +270,7 @@ runs:
 
           if (count === 0) {
             body = [
-              `⚠️ No baselines were updated.`,
+              `No baselines were updated.`,
               ``,
               `Possible reasons:`,
               `- The snapshot name(s) don't match any pending changes.`,
@@ -254,10 +280,10 @@ runs:
           } else {
             const list = approved.map(n => `- \`${n}\``).join('\n');
             const skipNote = skipped.length
-              ? `\n\n⚠️ Not found in pending baselines: ${skipped.map(n => `\`${n}\``).join(', ')}`
+              ? `\n\nNot found in pending baselines: ${skipped.map(n => `\`${n}\``).join(', ')}`
               : '';
             body = [
-              `✅ **${count} baseline${count === 1 ? '' : 's'} approved** by @${actor}`,
+              `**${count} baseline${count === 1 ? '' : 's'} approved** by @${actor}`,
               ``,
               list,
               skipNote,

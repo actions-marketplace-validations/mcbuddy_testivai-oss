@@ -19,7 +19,7 @@ The repo follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conven
 - `docs/intro.md` — Path A is now "dedicated adapters (Playwright + WebdriverIO)"; Path B is labeled experimental sidecar with cross-link to the new caveats doc.
 
 ### Removed
-- `docs/concepts/reveal-engine.md` — REVEAL is a cloud feature; the page belongs on the cloud docs site, not in OSS.
+- `docs/concepts/reveal-engine.md` — described the retired hosted service's analysis engine; removed from OSS docs.
 - `docs/concepts/baselines.md`, `docs/concepts/performance-metrics.md` — placeholder stubs ("Coming Soon"); content folded into `intro.md` and the framework adapter pages.
 - `docs/concepts/browser-integration.md` — described the sidecar architecture; superseded by `docs/sidecar-testivai-run.md`.
 - `docs/concepts/test-statuses.md` — described cloud statuses (PENDING, PROCESSING, AI_PROCESSING_ERROR); OSS uses the simpler `passed | changed | new` schema documented in `docs/extension-api.md`.
@@ -46,4 +46,4 @@ The repo follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) conven
 
 ## Earlier history
 
-For initial extraction history (Phase 1–10 of the SDK split out of `mcbuddy/testivai-monorepo`), see the [`CUTOVER.md`](./CUTOVER.md) runbook and the initial commits on `main`.
+For initial extraction history (Phase 1–10 of the SDK split out of the private TestivAI monorepo), see the initial commits on `main`.

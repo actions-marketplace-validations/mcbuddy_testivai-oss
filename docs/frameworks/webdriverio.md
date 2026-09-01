@@ -7,7 +7,7 @@ title: WebdriverIO
 
 The `@testivai/witness-webdriverio` adapter is a [WDIO service](https://webdriver.io/docs/customservices/) plus an explicit `testivai.witness(browser, name)` capture call. Same `.testivai/baselines/` layout as the Playwright adapter, same HTML report, same approval workflow.
 
-This page covers **local mode** — no account, no API key, fully standalone. Cloud upload from WDIO is not yet supported (use the Playwright adapter for that path today).
+Everything runs on your machine — no account, no API key, fully standalone.
 
 ---
 
@@ -35,10 +35,13 @@ Create `.testivai/config.json` at your project root:
 
 ```json
 {
-  "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
-  "autoOpen": false
+  "autoOpen": false,
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
@@ -132,6 +135,16 @@ To skip DOM capture for a single snapshot (rare — useful only when DOM seriali
 
 ```ts
 await testivai.witness(browser, 'heavy-page', { skipDom: true });
+
+// Hide dynamic elements for this snapshot only (merged with the global
+// ignoreSelectors list from .testivai/config.json)
+await testivai.witness(browser, 'dashboard', { ignoreSelectors: ['.live-feed'] });
+
+// Opt out of capture stabilization (animations frozen, fonts awaited) per call
+await testivai.witness(browser, 'animation-demo', { stabilize: false });
+
+// Multi-capability runs: key baselines per capability so they don't collide
+await testivai.witness(browser, 'homepage', { variant: 'firefox-mobile' });
 ```
 
 ---
@@ -152,15 +165,13 @@ All options are optional; defaults come from `.testivai/config.json`.
 
 ---
 
-## Cloud mode (not yet supported)
+## Local-only by design
 
-The Playwright adapter has both local and cloud lanes. The WDIO adapter ships local-only in the first iteration. Cloud upload from WDIO will be added once the local path is broadly used.
-
-If you set `mode: "cloud"` in `.testivai/config.json` while using WDIO, the adapter logs a clear warning and exits without generating a report.
+The WDIO adapter is local-only: captures, diffs, and the report are all produced on disk. The legacy `mode` config field is retired and ignored when present.
 
 ---
 
 ## See also
 
-- [`@testivai/witness-webdriverio` package README](https://github.com/mcbuddy/testivai-oss/tree/main/packages/webdriverio)
+- [`@testivai/witness-webdriverio` package README](https://github.com/testivai/testivai-oss/tree/main/packages/webdriverio)
 - [Quickstart for the Playwright adapter](./playwright.md) (similar shape, different framework)

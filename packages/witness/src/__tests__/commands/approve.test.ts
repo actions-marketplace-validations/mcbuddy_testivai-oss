@@ -22,6 +22,7 @@ describe('Approve Command (BaselineStore operations)', () => {
 
   const FAKE_PNG_A = Buffer.from('approve-test-baseline');
   const FAKE_PNG_B = Buffer.from('approve-test-updated');
+  const _FAKE_PNG_C = Buffer.from('approve-test-third');
 
   describe('T4.1 - approve specific name', () => {
     it('should copy temp to baseline', () => {
@@ -72,6 +73,49 @@ describe('Approve Command (BaselineStore operations)', () => {
       expect(() => {
         store.approve('nonexistent');
       }).toThrow(/No temp screenshot found.*nonexistent/);
+    });
+  });
+
+  describe('findLatestUndoable', () => {
+    it('returns null when no baselines have .previous/', () => {
+      expect(store.findLatestUndoable()).toBeNull();
+
+      store.write('homepage', FAKE_PNG_A);
+      expect(store.findLatestUndoable()).toBeNull();
+    });
+
+    it('returns the name with the newest .previous/screenshot.png mtime', () => {
+      // Create two baselines with .previous/ backups
+      store.write('homepage', FAKE_PNG_A);
+      store.writeTemp('homepage', FAKE_PNG_B);
+      store.approve('homepage');
+
+      // Small delay so mtime differs
+      const later = new Date(Date.now() + 2000);
+
+      store.write('dashboard', FAKE_PNG_A);
+      store.writeTemp('dashboard', FAKE_PNG_B);
+      store.approve('dashboard');
+
+      // Touch the homepage .previous/ screenshot to make it newer
+      const homePrev = path.join(
+        store.getBaselineDir('homepage'),
+        '.previous',
+        'screenshot.png'
+      );
+      fs.utimesSync(homePrev, later, later);
+
+      expect(store.findLatestUndoable()).toBe('homepage');
+    });
+
+    it('skips directories that are not baselines', () => {
+      // Create a stray file in baselines dir
+      fs.mkdirSync(path.join(tmpDir, '.testivai', 'baselines'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, '.testivai', 'baselines', 'not-a-dir'),
+        'garbage'
+      );
+      expect(store.findLatestUndoable()).toBeNull();
     });
   });
 });

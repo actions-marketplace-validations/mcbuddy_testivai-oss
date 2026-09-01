@@ -11,8 +11,7 @@ For task recipes, see `SKILLS.md`.
 ## What this repo is
 
 The public open-source home for the TestivAI visual regression SDKs.
-Everything here runs **fully locally** — no cloud account, no API key required.
-An optional cloud upgrade path exists but is never surfaced in OSS code.
+Everything here runs **fully locally** — no account, no API key, no server.
 
 ---
 
@@ -21,9 +20,10 @@ An optional cloud upgrade path exists but is never surfaced in OSS code.
 1. **pnpm only.** Never run `npm install` or `yarn` in the workspace root or any package.
    The only exception is inside `action/` (the GitHub Action), which uses plain `npm`.
 
-2. **Terminology firewall.** OSS code and docs must never mention: REVEAL, 5-layer analysis,
-   AI counselor, smart baselines, CSS fingerprinting, or the cloud dashboard.
-   Allowed terms: pixel diff, DOM diff, noise hint, local mode, baselines, threshold.
+2. **Local-first, OSS-only.** There is no hosted service. Never reference a cloud
+   product, dashboard, account, or API key in docs or code. AI explanation is
+   bring-your-own-model via `@testivai/mcp` (`explain_snapshot`).
+   Core vocabulary: pixel diff, DOM diff, noise hint, layered analysis, baselines, threshold.
 
 3. **`action/dist/index.js` must always be committed.** After any change to `action/src/`,
    rebuild with `cd action && npm run build` and commit the updated `dist/index.js`.
@@ -42,13 +42,14 @@ An optional cloud upgrade path exists but is never surfaced in OSS code.
 
 ```
 packages/
-  common/       @testivai/common            shared config, API client, auth, compression
   witness/      @testivai/witness           core SDK: CLI, diff engine, baselines, HTML report
   playwright/   @testivai/witness-playwright Playwright reporter + capture adapter
-  webdriverio/  @testivai/witness-webdriverio WebdriverIO service + capture (local mode)
+  webdriverio/  @testivai/witness-webdriverio WebdriverIO service + capture
+  selenium/     @testivai/witness-selenium   Selenium adapter
+  mcp/          @testivai/mcp                MCP server: results + diff images for AI agents
 
-action/         mcbuddy/testivai-oss@v1     GitHub Action: post PR comment + commit status
-approve/        mcbuddy/testivai-oss/approve@v1  GitHub Action: /testivai approve command handler
+action/         testivai/testivai-oss@v1     GitHub Action: post PR comment + commit status
+approve/        testivai/testivai-oss/approve@v1  GitHub Action: /testivai approve command handler
 
 examples/       minimal working examples per framework
 docs/           public Markdown documentation
@@ -88,13 +89,13 @@ User test
   → reporter writes visual-report/results.json + visual-report/index.html
 
 CI — GitHub Actions
-  → mcbuddy/testivai-oss@v1
+  → testivai/testivai-oss@v1
       reads results.json
       bundles .testivai/temp/ → visual-report/pending-baselines/
       uploads testivai-visual-report artifact
       posts PR comment + commit status
   → developer comments /testivai approve [name|--all]
-  → mcbuddy/testivai-oss/approve@v1
+  → testivai/testivai-oss/approve@v1
       verifies commenter has write access
       downloads artifact
       copies pending-baselines/<name>/ → .testivai/baselines/<name>/
@@ -146,7 +147,7 @@ CI — GitHub Actions
 
 ```
 .testivai/
-  config.json                    { mode, threshold, reportDir, autoOpen }
+  config.json                    see LocalConfig in packages/witness/src/config/local-config.ts
   baselines/
     <name>/
       screenshot.png             committed reference screenshot
@@ -163,11 +164,14 @@ CI — GitHub Actions
 
 ## Public contract — `results.json` schema (semver-governed)
 
+Version constant: `RESULTS_SCHEMA_VERSION` in `packages/witness/src/report/generator.ts`.
+
 ```json
 {
-  "version": "2.0.0",
+  "version": "2.3.0",
   "timestamp": "<ISO>",
-  "summary": { "total": 3, "passed": 0, "changed": 3, "newSnapshots": 0 },
+  "summary": { "total": 3, "passed": 0, "changed": 3, "newSnapshots": 0, "missing": 1 },
+  "missingBaselines": ["pricing"],
   "snapshots": [
     {
       "name": "homepage",
@@ -176,17 +180,28 @@ CI — GitHub Actions
       "baselinePath": "images/homepage/baseline.png",
       "currentPath":  "images/homepage/current.png",
       "diffPath":     "images/homepage/diff.png",
+      "baselineApprovedAt": "<ISO>",
       "dom": {
         "changed":   false,
         "noiseHint": true,
-        "summary":   null
-      }
+        "summary":   null,
+        "styleCheck":   "mismatch",
+        "styleChanges": []
+      },
+      "regions":   [{ "x": 10, "y": 20, "width": 100, "height": 40,
+                      "classification": "shift", "shift": { "dx": 0, "dy": -1 },
+                      "elements": [{ "selector": ".hero > h1", "role": "shifted" }] }],
+      "pageShift": { "dy": -1, "belowY": 120, "count": 4 },
+      "masks": [], "maskWarnings": [],
+      "autoPassed": "noise"
     }
   ]
 }
 ```
 
 Breaking changes to this schema require a major version bump on `@testivai/witness`.
+
+Exit codes (`packages/witness/src/commands/exit-codes.ts`): 0 pass / 1 changed / 2 new-only (gated by `--fail-on-diff`) / 3 missing-only (`failOnMissing` defaults **true**). Precedence: changed > missing > new.
 
 ---
 

@@ -33,50 +33,30 @@ Playwright uses a dedicated SDK, not the `@testivai/witness` CLI. Do not run `te
 
 ---
 
-## 2. Choose your mode
+## 2. Configure (optional)
 
-The Playwright SDK supports two modes. **You only need to configure one.**
-
-### Mode A — Local mode (recommended for OSS)
-
-No API key required. Diffs and reports are produced on disk.
-
-Create `.testivai/config.json` at your project root:
+Local mode is the default — no API key, no account; diffs and reports are produced on disk with zero configuration. To customize thresholds or paths, create `.testivai/config.json` at your project root:
 
 ```json
 {
-  "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
-  "autoOpen": false
+  "autoOpen": false,
+  "maxDiffPercent": 0,
+  "noiseAutoPass": false,
+  "stabilize": true,
+  "ignoreSelectors": []
 }
 ```
 
 The reporter detects this file and switches to local mode automatically. **Skip to step 3.**
 
-### Mode B — Cloud mode (optional, hosted)
+Tolerance & capture settings (all optional — full reference in [Getting Started](../intro.md)):
 
-Get your API key from the [TestivAI Dashboard](https://dashboard.testiv.ai) and set it as a **shell environment variable**:
-
-```bash
-export TESTIVAI_API_KEY=your-api-key
-```
-
-To make this permanent, add it to your shell profile:
-
-```bash
-# zsh (macOS default)
-echo 'export TESTIVAI_API_KEY=your-api-key' >> ~/.zshrc
-source ~/.zshrc
-
-# bash
-echo 'export TESTIVAI_API_KEY=your-api-key' >> ~/.bashrc
-source ~/.bashrc
-```
-
-:::warning Shell environment variables only
-TestivAI SDKs read configuration **exclusively from shell environment variables** (`process.env`). Do **not** use `.env` files or `dotenv` — the SDK will not load them. Always `export` your variables in your shell or CI environment.
-:::
+- `maxDiffPercent` / `maxDiffPixels` — diffs within these bounds report as **passed** (labeled `autoPassed` in the report and `results.json`)
+- `noiseAutoPass` + `noiseMaxDiffPercent` — auto-pass DOM-identical diffs (the noise hint) within the bound
+- `stabilize` (default `true`) — before every capture: animations/transitions frozen, caret hidden, web fonts awaited — the top causes of flaky visual diffs, neutralized by default
+- `ignoreSelectors` — elements hidden (`visibility: hidden`) during capture
 
 ---
 
@@ -110,15 +90,30 @@ export default defineConfig({
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `debug` | `boolean` | `false` | Enable verbose logging. Can also be set via `TESTIVAI_DEBUG=true` |
-| `apiUrl` | `string` | `https://core-api.testiv.ai` | Custom API endpoint URL |
-| `apiKey` | `string` | `process.env.TESTIVAI_API_KEY` | API key (overrides environment variable) |
-| `compression` | `object` | `{}` | Compression settings for uploads |
+| `captureOnly` | `boolean` | auto | Capture without comparing or writing a report. Auto-enables for sharded runs (`--shard=i/N`, N > 1), where comparing inside a shard is wrong. Also settable via `TESTIVAI_CAPTURE_ONLY=1`; set `false` to force per-shard reports. |
+
+:::note The reporter cannot fail your build
+Playwright owns the exit code and it reflects test results, not visual ones — so
+`npx playwright test` can print `Changed: 3` and still exit `0`. The report is
+for looking at; **`npx testivai report --fail-on-diff` is what gates CI.** The
+reporter prints a warning saying exactly this whenever something changed.
+
+In CI, `captureOnly` (or `TESTIVAI_CAPTURE_ONLY=1`) is the tidy setup: capture in
+the test run, compare once in the gate step. See the
+[CI/CD guide](../guides/ci-cd.md).
+:::
 
 ---
 
 ## 4. Add Capture Calls
 
-Import `testivai` from the SDK and call `testivai.witness(page, testInfo, 'name')` in your tests:
+Import `testivai` from the SDK and call `testivai.witness(page, testInfo, 'name')` in your tests.
+
+**Multiple Playwright projects?** Snapshots are keyed per project
+automatically: with projects `chromium-desktop` and `mobile-safari`, the
+same call produces `homepage__chromium-desktop` and
+`homepage__mobile-safari` — no baseline collisions. Single-project configs
+keep plain names. An optional fourth argument takes per-snapshot overrides, e.g. `{ ignoreSelectors: ['.live-widget'], stabilize: false, mask: ['#cookie-banner', { top: 24 }] }` (masks are excluded from the diff and hatched in the report — see [Comparison](../comparison.md)):
 
 ```ts
 import { test } from '@playwright/test';
@@ -175,6 +170,38 @@ npx playwright test
 
 ---
 
+## Cross-browser testing
+
+The capture path uses only native Playwright APIs, so Firefox and WebKit
+work exactly like Chromium. Enable them by listing multiple projects:
+
+```ts
+projects: [
+  { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+  { name: 'firefox',  use: { ...devices['Desktop Firefox'] } },
+  { name: 'webkit',   use: { ...devices['Desktop Safari'] } },
+],
+```
+
+With more than one project, every snapshot is keyed per browser
+automatically — `header__chromium`, `header__firefox`, `header__webkit` —
+so each engine diffs against its own baseline (browsers rasterize fonts
+and anti-aliasing differently; comparing across engines would always be
+red). Approve them like any other snapshot: `npx testivai approve --all`.
+
+**Migrating from a single-project config:** snapshot names gain the
+`__<project>` suffix the moment a second project appears. Your existing
+un-suffixed baselines become orphans — delete them, run once, and approve
+the new per-browser set.
+
+Remember to install the extra engines in CI:
+`npx playwright install chromium firefox webkit --with-deps`.
+
+The standalone `testivai witness <url>` crawler and the experimental
+`testivai run` sidecar drive Chrome over CDP and remain Chromium-only.
+
+---
+
 ## CI/CD
 
 GitHub Actions example:
@@ -188,24 +215,34 @@ GitHub Actions example:
 
 - name: Run visual tests
   run: npx playwright test
-  env:
-    TESTIVAI_API_KEY: ${{ secrets.TESTIVAI_API_KEY }}
+
+- name: Visual diff gate
+  run: npx testivai report --fail-on-diff
 ```
+
+**Baselines belong to the environment that compares them.** Font
+rasterization differs between macOS, Windows, and Linux, so a baseline
+captured on your laptop will report diffs on a Linux CI runner every
+time — 100% changed, forever. If CI is where comparisons happen, adopt
+CI's own captures as baselines: the [report action](../github-action.md)
+bundles every changed capture into the artifact as
+`visual-report/pending-baselines/`, and a `/testivai approve` PR comment
+commits them back to the branch. Local runs on a different OS remain
+useful as a smoke check, just not as the source of truth.
 
 ---
 
 ## What gets captured
 
-| Data | Local mode | Cloud mode |
+| Data | Captured | Powers |
 |---|---|---|
-| Full-page PNG screenshot | ✅ | ✅ |
-| Subdirectory layout (`temp/<name>/screenshot.png`) | ✅ | — |
-| Page HTML (structure) | — | ✅ |
-| Computed styles | — | ✅ |
-| Bounding boxes / layout JSON | — | ✅ |
-| Performance metrics (Web Vitals) | — | ✅ |
+| Full-page PNG screenshot | Yes | The pixel diff and heatmap |
+| Page HTML snapshot | Yes | DOM diff, render-noise hint, text-change detection |
+| Element map (selectors, boxes, computed styles) | Yes | Region→selector attribution, shift detection, style check |
 
-In local mode, only the screenshot is captured. Cloud mode additionally captures structural and performance data for REVEAL Engine™ analysis.
+Everything is written under `.testivai/temp/<name>/` and compared against `.testivai/baselines/<name>/`. Nothing leaves your machine.
+
+The screenshot and a DOM snapshot are captured — the DOM snapshot powers the render-noise hint and text-change detection, and the element map powers region→selector attribution, shift detection, and the style-change check.
 
 ---
 
@@ -217,13 +254,8 @@ The Playwright SDK uses Playwright's native `page.screenshot()`, `page.evaluate(
 
 ---
 
-## Version History
+## Changelog
 
-- **v1.1.3** (Latest) — Fix: local-mode snapshots now write the subdirectory layout expected by `@testivai/witness/report`, so the HTML report is correctly populated.
-- **v1.1.2** — First release from [`testivai-oss`](https://github.com/mcbuddy/testivai-oss); URLs/workspace topology updates only.
-- **v1.1.0** — Local mode (config-driven) added.
-- **v1.0.0** — REVEAL Engine terminology rename.
-- **v0.3.1** — Fixed dist build.
-- **v0.3.0** — Reporter crash fix, debug logging, unified format with Witness SDK.
-- **v0.2.0** — Structure analysis and styles fingerprinting.
-- **v0.1.13** — Initial public release.
+Per-release notes live in
+[CHANGELOG.md](https://github.com/testivai/testivai-oss/blob/main/packages/playwright/CHANGELOG.md)
+and on the [GitHub releases page](https://github.com/testivai/testivai-oss/releases).

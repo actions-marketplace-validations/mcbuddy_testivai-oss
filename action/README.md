@@ -22,7 +22,7 @@ jobs:
       - run: npx playwright test
 
       # Post results to PR (always runs so a failed test still gets a report)
-      - uses: mcbuddy/testivai-oss@v1
+      - uses: testivai/testivai-oss@v1
         if: always()
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
@@ -41,11 +41,15 @@ Pin to `@v1` for rolling major-version updates, or `@v1.0.0` for a fixed point r
 | `fail-on-diff` | Fail workflow if visual changes detected | No | `false` |
 | `upload-artifact` | Upload report as a workflow artifact | No | `true` |
 | `artifact-retention-days` | Days to retain artifact | No | `30` |
+| `artifact-name` | Name of the uploaded artifact | No | `testivai-visual-report` |
+| `status-context` | Name of the commit status context; also namespaces the PR comment | No | `TestivAI / visual` |
+
+When a repo runs more than one visual lane (e.g. a Playwright workflow and a pytest workflow), give each its own `status-context` (and `artifact-name`) so the second workflow doesn't overwrite the first's commit status and PR comment — each lane gets its own status entry and its own upserted comment.
 
 ## What it posts
 
-- **PR comment** (upserted via `<!-- testivai-visual-report -->` marker) summarising passed / changed / new counts, with collapsed details for each changed snapshot and approval commands
-- **Commit status** under the context `TestivAI / visual` — `success`, `pending`, or `failure` based on `fail-on-diff`
+- **PR comment** (upserted via `<!-- testivai-visual-report -->` marker; namespaced per `status-context` for non-default contexts) summarising passed / changed / new counts, with collapsed details for each changed snapshot and approval commands
+- **Commit status** under the context `TestivAI / visual` (configurable via `status-context`) — `success`, `pending`, or `failure` based on `fail-on-diff`
 - **Workflow artifact** of the entire `report-dir` (HTML report, `results.json`, diff images)
 
 The PR comment surfaces the **DOM noise hint** from the OSS `@testivai/witness` pixel-and-DOM comparison: when pixels differ but the DOM is structurally identical, the comment flags the change as likely render noise. When the DOM also differs, the comment summarises added / removed / attribute-change counts so reviewers can decide whether the change is intentional.
@@ -53,15 +57,15 @@ The PR comment surfaces the **DOM noise hint** from the OSS `@testivai/witness` 
 ## Example output
 
 ```
-### 🔍 TestivAI Visual Report
+### TestivAI Visual Report
 
-✅ 12 passed · ⚠️ 3 changed · 🆕 2 new
+**12 passed** | **3 changed** | **2 new**
 
 #### Changed Snapshots
 <details>
 <summary>checkout-page — 0.5% different</summary>
 
-> 💡 DOM unchanged — pixel diff is likely render noise (anti-aliasing, font hinting).
+> DOM unchanged — pixel diff is likely render noise (anti-aliasing, font hinting).
 
 npx testivai approve "checkout-page"
 </details>
@@ -69,7 +73,7 @@ npx testivai approve "checkout-page"
 <details>
 <summary>nav-redesign — 8.5% different</summary>
 
-> 🧱 DOM changed — 2 added, 1 attribute change.
+> DOM changed — 2 added, 1 attribute change.
 
 npx testivai approve "nav-redesign"
 </details>
@@ -84,7 +88,7 @@ Why `action.yml` is at the repo root and the rest is under `action/`:
 | `action.yml` (repo root) | Required by GitHub Marketplace — only root-level metadata files are auto-listed. |
 | `action/src/`, `action/dist/`, `action/package.json`, `action/README.md`, `action/jest.config.js` | Source, build output, package config, and docs. Kept in a subdir so the workspace root stays SDK-focused. |
 
-`action.yml`'s `runs.main:` resolves to `action/dist/index.js`. Consumers `uses: mcbuddy/testivai-oss@v1` (no path).
+`action.yml`'s `runs.main:` resolves to `action/dist/index.js`. Consumers `uses: testivai/testivai-oss@v1` (no path).
 
 ## Contributing
 
@@ -109,6 +113,6 @@ MIT
 
 ## Links
 
-- Repo: https://github.com/mcbuddy/testivai-oss
-- Issues: https://github.com/mcbuddy/testivai-oss/issues
+- Repo: https://github.com/testivai/testivai-oss
+- Issues: https://github.com/testivai/testivai-oss/issues
 - Marketing: https://testiv.ai

@@ -1,19 +1,20 @@
 # testivai-oss — Claude Code Guide
 
 This is the public open-source repository for the TestivAI SDKs.
-All packages here enable **fully local visual regression testing** with no cloud account required.
+All packages here enable **fully local visual regression testing** — no account, no API key, no server.
 
 ## Repo layout
 
 ```
 packages/
-  common/      @testivai/common      — shared config/API/auth utilities
   witness/     @testivai/witness     — core SDK: CLI, diff engine, baselines, HTML report
   playwright/  @testivai/witness-playwright  — Playwright reporter + capture adapter
-  webdriverio/ @testivai/witness-webdriverio — WebdriverIO service + capture (local mode)
+  webdriverio/ @testivai/witness-webdriverio — WebdriverIO service + capture
+  selenium/    @testivai/witness-selenium    — Selenium WebDriver capture adapter
+  mcp/         @testivai/mcp                 — MCP server: results + diff images for AI agents (read-only; no approve tool by design)
 
-action/        mcbuddy/testivai-oss@v1      — GitHub Action: post PR comment + commit status
-approve/       mcbuddy/testivai-oss/approve@v1 — GitHub Action: /testivai approve command handler
+action/        testivai/testivai-oss@v1      — GitHub Action: post PR comment + commit status
+approve/       testivai/testivai-oss/approve@v1 — GitHub Action: /testivai approve command handler
 
 examples/      minimal working examples per framework
 docs/          public Markdown documentation
@@ -29,6 +30,7 @@ Never use `npm` or `yarn` inside this repo. Use `pnpm` for all installs, builds,
 
 ```bash
 pnpm install          # install all workspace deps
+pnpm lint             # biome lint (lint-only; no formatter)
 pnpm build            # tsc compile all packages
 pnpm test             # run unit tests across all packages (jest)
 pnpm e2e              # run OSS smoke E2E suite
@@ -52,11 +54,11 @@ User writes test
   → reporter writes visual-report/results.json + visual-report/index.html
 
 CI (GitHub Actions):
-  → mcbuddy/testivai-oss@v1  reads results.json, posts PR comment + commit status
+  → testivai/testivai-oss@v1  reads results.json, posts PR comment + commit status
                               bundles .testivai/temp/ → visual-report/pending-baselines/
                               uploads testivai-visual-report artifact
   → developer posts /testivai approve [name|--all] in PR comment
-  → mcbuddy/testivai-oss/approve@v1  verifies commenter write access
+  → testivai/testivai-oss/approve@v1  verifies commenter write access
                                       downloads artifact, copies pending-baselines → .testivai/baselines/
                                       commits updated baselines back to PR branch
                                       CI re-runs → passes
@@ -68,12 +70,14 @@ CI (GitHub Actions):
 - `src/baselines/store.ts`   — BaselineStore: read/write/approve/undo baselines and temp
 - `src/diff/diff.ts`         — pixel comparison (pixelmatch-based)
 - `src/diff/dom-diff.ts`     — zero-dep DOM tokenizer + multiset comparator; emits noiseHint
-- `src/report/compare.ts`    — orchestrates diff, writes images to visual-report/images/
+- `src/config/local-config.ts` — LocalConfig type + defaults (single source of truth for config.json fields)
+- `src/report/compare.ts`    — orchestrates diff, writes images to visual-report/images/, applies pass criteria (maxDiffPercent/maxDiffPixels/noiseAutoPass → status passed + autoPassed marker)
 - `src/report/generator.ts`  — writes results.json + renders index.html
 - `src/report/template.ts`   — HTML template for the report
 
 ### @testivai/witness-playwright (`packages/playwright/`)
-- `src/snapshot.ts`          — `testivai.witness()` entry point
+- `src/snapshot.ts`          — `testivai.witness()` entry point (stabilizes page, applies ignoreSelectors, captures)
+- `src/config/stabilize.ts`  — capture stabilization CSS + resolution (per-call > project > config.json > default true)
 - `src/reporter.ts`          — Playwright reporter (reads config, calls compare, generates report)
 
 ### GitHub Action reporter (`action/`)
@@ -81,7 +85,7 @@ CI (GitHub Actions):
 - `src/comment.ts`           — builds PR comment markdown (with DOM noise hint)
 - `src/status.ts`            — determines pass/fail commit status
 - `src/types.ts`             — shared TypeScript interfaces
-- `dist/index.js`            — bundled output (ncc); **must be committed**; rebuild with `npm run build` inside `action/`
+- `dist/index.js`            — bundled output (esbuild); **must be committed**; rebuild with `npm run build` inside `action/`
 
 ### GitHub Action approver (`approve/`)
 - `action.yml`               — composite action; no build step needed (pure shell + github-script)
@@ -107,7 +111,15 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
 
 ```
 .testivai/
-  config.json                          — { mode, threshold, reportDir, autoOpen }
+  config.json                          — see LocalConfig in
+                                         packages/witness/src/config/local-config.ts
+                                         (single source of truth): threshold,
+                                         reportDir, autoOpen, baselinesDir,
+                                         maxDiffPercent, maxDiffPixels, noiseAutoPass,
+                                         noiseMaxDiffPercent, stabilize, shiftTolerance,
+                                         volatileAttributes, ignoreSelectors, mask,
+                                         diffRegions, failOnDiff, failOnMissing,
+                                         shareUploadCommand
   baselines/
     <snapshot-name>/
       screenshot.png                   — committed reference screenshot
@@ -124,11 +136,14 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
 
 ## results.json schema (public contract, semver-governed)
 
+Version constant: `RESULTS_SCHEMA_VERSION` in `packages/witness/src/report/generator.ts`.
+
 ```json
 {
-  "version": "2.0.0",
+  "version": "2.3.0",
   "timestamp": "<ISO>",
-  "summary": { "total": 3, "passed": 0, "changed": 3, "newSnapshots": 0 },
+  "summary": { "total": 3, "passed": 0, "changed": 3, "newSnapshots": 0, "missing": 1 },
+  "missingBaselines": ["pricing"],
   "snapshots": [
     {
       "name": "homepage",
@@ -137,21 +152,37 @@ The approve action (`approve/action.yml`) is a composite action — no build ste
       "baselinePath": "images/homepage/baseline.png",
       "currentPath":  "images/homepage/current.png",
       "diffPath":     "images/homepage/diff.png",
+      "baselineApprovedAt": "<ISO>",  // when the baseline was last approved
       "dom": {
         "changed":   false,
         "noiseHint": true,
-        "summary":   null
-      }
+        "summary":   null,
+        "styleCheck":   "mismatch",   // "match" | "mismatch" | "unavailable"
+        "styleChanges": []
+      },
+      "regions": [                    // pixel clusters attributed to elements
+        {
+          "x": 10, "y": 20, "width": 100, "height": 40,
+          "classification": "shift",  // "shift" | "change"
+          "shift": { "dx": 0, "dy": -1 },
+          "elements": [{ "selector": ".hero > h1", "role": "shifted" }]
+        }
+      ],
+      "pageShift": { "dy": -1, "belowY": 120, "count": 4 },
+      "masks": [], "maskWarnings": [],
+      "autoPassed": "noise"   // optional; "threshold" | "noise" | "shift" when a
+                              // pass criterion turned a pixel diff into status passed
     }
   ]
 }
 ```
 
-## Terminology firewall
+Exit-code contract (`packages/witness/src/commands/exit-codes.ts`): 0 pass / 1 changed / 2 new-only (gated by `--fail-on-diff`) / 3 missing-only (`failOnMissing` defaults **true**; escape with config `false` or `--allow-missing`). Precedence: changed > missing > new.
 
-- **OSS terms**: pixel diff, DOM diff, noise hint, local mode, baselines, threshold
-- **Cloud terms**: REVEAL, 5-layer, AI counselor, smart baselines, dashboard
-- Never use cloud terminology in OSS package docs/code. Never ship CSS fingerprinting in OSS.
+## Terminology
+
+- Core vocabulary: pixel diff, DOM diff, noise hint, layered analysis, baselines, threshold, heatmap.
+- TestivAI is **local-first and OSS-only** — there is no hosted service. Never reference a cloud product, dashboard, account, or API key in docs or code; AI-powered explanation is bring-your-own-model via `@testivai/mcp` (`explain_snapshot`). See `docs/philosophy.md`.
 
 ## PR conventions
 

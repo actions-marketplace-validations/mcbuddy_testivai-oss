@@ -70,7 +70,11 @@ describe('witness()', () => {
     const tempDir = path.join(projectRoot, '.testivai', 'temp', 'no-dom');
     expect(fs.existsSync(path.join(tempDir, 'screenshot.png'))).toBe(true);
     expect(fs.existsSync(path.join(tempDir, 'dom.html'))).toBe(false);
-    expect(browser.execute).not.toHaveBeenCalled();
+    // execute() is still used for capture stabilization — but never for DOM
+    const domCalls = (browser.execute as jest.Mock).mock.calls.filter(
+      (c) => typeof c[0] === 'string' && c[0].includes('outerHTML'),
+    );
+    expect(domCalls).toHaveLength(0);
   });
 
   it('omits dom.html when browser.execute is missing', async () => {
@@ -125,5 +129,95 @@ describe('witness()', () => {
     await expect(witness(browser, 'no-pixels')).rejects.toThrow(
       /returned an empty value/,
     );
+  });
+
+  describe('variant keying', () => {
+    it('folds the variant into the snapshot name (sanitized)', async () => {
+      await witness(makeBrowser(), 'homepage', { variant: 'Firefox Mobile @2x' });
+      const tempDir = path.join(projectRoot, '.testivai', 'temp', 'homepage__firefox_mobile_2x');
+      expect(fs.existsSync(path.join(tempDir, 'screenshot.png'))).toBe(true);
+    });
+
+    it('different variants never collide', async () => {
+      await witness(makeBrowser(), 'homepage', { variant: 'chrome' });
+      await witness(makeBrowser(), 'homepage', { variant: 'firefox' });
+      const base = path.join(projectRoot, '.testivai', 'temp');
+      expect(fs.existsSync(path.join(base, 'homepage__chrome', 'screenshot.png'))).toBe(true);
+      expect(fs.existsSync(path.join(base, 'homepage__firefox', 'screenshot.png'))).toBe(true);
+    });
+  });
+
+  describe('capture preparation (stabilize + ignoreSelectors)', () => {
+    const executedScripts = (browser: WitnessBrowser): string[] =>
+      (browser.execute as jest.Mock).mock.calls
+        .map((c) => c[0])
+        .filter((s): s is string => typeof s === 'string');
+
+    const writeConfig = (config: object) => {
+      fs.mkdirSync(path.join(projectRoot, '.testivai'), { recursive: true });
+      fs.writeFileSync(
+        path.join(projectRoot, '.testivai', 'config.json'),
+        JSON.stringify(config),
+      );
+    };
+
+    it('injects stabilization CSS by default and removes it after capture', async () => {
+      const browser = makeBrowser();
+      await witness(browser, 'stable');
+
+      const scripts = executedScripts(browser);
+      expect(scripts.some((s) => s.includes('animation-duration: 0.001s'))).toBe(true);
+      expect(scripts.some((s) => s.includes('caret-color: transparent'))).toBe(true);
+      expect(scripts.some((s) => s.includes('el.remove()'))).toBe(true);
+    });
+
+    it('waits on document.fonts before the screenshot', async () => {
+      const browser = makeBrowser();
+      await witness(browser, 'fonts');
+
+      const scripts = executedScripts(browser);
+      expect(scripts.some((s) => s.includes('document.fonts'))).toBe(true);
+    });
+
+    it('merges ignoreSelectors from config.json and per-call options', async () => {
+      writeConfig({ mode: 'local', ignoreSelectors: ['.from-config'] });
+      const browser = makeBrowser();
+      await witness(browser, 'ignored', { ignoreSelectors: ['.from-call'] });
+
+      const injected = executedScripts(browser).find((s) => s.includes('visibility: hidden'));
+      expect(injected).toBeDefined();
+      expect(injected).toContain('.from-config');
+      expect(injected).toContain('.from-call');
+    });
+
+    it('honors stabilize: false from config.json (no CSS injected)', async () => {
+      writeConfig({ mode: 'local', stabilize: false });
+      const browser = makeBrowser();
+      await witness(browser, 'raw');
+
+      const scripts = executedScripts(browser);
+      expect(scripts.some((s) => s.includes('animation-duration'))).toBe(false);
+      // no style tag injected — the DOM-capture script legitimately contains
+      // element removal (ignoreSelectors exclusion), so target the style id
+      expect(scripts.some((s) => s.includes('__testivai_capture_css__'))).toBe(false);
+    });
+
+    it('per-call stabilize: false wins over config default', async () => {
+      const browser = makeBrowser();
+      await witness(browser, 'raw-call', { stabilize: false });
+
+      const scripts = executedScripts(browser);
+      expect(scripts.some((s) => s.includes('animation-duration'))).toBe(false);
+    });
+
+    it('removes the injected CSS even when the screenshot throws', async () => {
+      const browser = makeBrowser({
+        takeScreenshot: jest.fn().mockRejectedValue(new Error('boom')),
+      });
+      await expect(witness(browser, 'explodes')).rejects.toThrow('boom');
+
+      const scripts = executedScripts(browser);
+      expect(scripts.some((s) => s.includes('__testivai_capture_css__') && s.includes('remove'))).toBe(true);
+    });
   });
 });

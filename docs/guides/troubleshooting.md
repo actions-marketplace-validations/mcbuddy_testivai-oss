@@ -9,69 +9,18 @@ This guide covers common issues and solutions when using TestivAI SDKs and servi
 
 ## Table of Contents
 
-- [Authentication Issues](#authentication-issues)
 - [SDK-Specific Issues](#sdk-specific-issues)
 - [CI/CD Issues](#cicd-issues)
 - [Performance Issues](#performance-issues)
-- [Network Issues](#network-issues)
 - [Debug Mode](#debug-mode)
-
-## Authentication Issues
-
-### API Key Not Found / Invalid API Key
-
-**Symptoms**: 
-- "Invalid API key" error
-- "API key not found" error
-- Authentication failing even after running `testivai auth`
-
-**Cause**: The `testivai auth` command validates your key but doesn't export it to your current shell session. Your test runner reads from the `TESTIVAI_API_KEY` environment variable.
-
-**Solutions**:
-
-1. **Export to current shell session**:
-   ```bash
-   export TESTIVAI_API_KEY=your-actual-api-key-here
-   ```
-
-2. **Add to shell profile** (permanent — recommended for local dev):
-   ```bash
-   # For zsh (macOS default)
-   echo 'export TESTIVAI_API_KEY=your-actual-api-key-here' >> ~/.zshrc
-   source ~/.zshrc
-   
-   # For bash
-   echo 'export TESTIVAI_API_KEY=your-actual-api-key-here' >> ~/.bashrc
-   source ~/.bashrc
-   ```
-
-3. **In CI/CD**: Set as environment variable in your pipeline:
-   ```yaml
-   # GitHub Actions
-   env:
-     TESTIVAI_API_KEY: ${{ secrets.TESTIVAI_API_KEY }}
-   ```
-
-:::warning Do not use .env files
-TestivAI SDKs read **only from shell environment variables** (`process.env`). The SDKs do not use `dotenv` or load `.env` files. Always use `export` in your shell or set variables in your CI provider's secrets.
-:::
-
-### API Key Expired
-
-**Symptoms**: Authentication was working but suddenly stopped
-
-**Solution**: 
-1. Check your API key in the [dashboard](https://dashboard.testiv.ai)
-2. Generate a new key if needed
-3. Update your environment variable
 
 ## SDK-Specific Issues
 
 ### Playwright SDK
 
 #### Tests hanging after witness() call
-- **Cause**: Promise not resolving due to network issues
-- **Solution**: Check network connectivity and API key validity
+- **Cause**: Promise not resolving (slow page, large capture)
+- **Solution**: Check the page finishes loading; raise the test timeout for very tall pages
 
 #### "window.testivai is not defined"
 - **Cause**: TestivAI not properly imported or test.use() not configured
@@ -81,7 +30,7 @@ TestivAI SDKs read **only from shell environment variables** (`process.env`). Th
 
 #### Browser debugging endpoint not found
 ```
-❌ Browser debugging endpoint not found
+error: Browser debugging endpoint not found
 ```
 
 **Solution**: Make sure Chrome is running with remote debugging:
@@ -91,7 +40,7 @@ chrome --remote-debugging-port=9222
 
 #### Connection timeout
 ```
-❌ Failed to connect to browser: Connection timeout
+error: Failed to connect to browser: Connection timeout
 ```
 
 **Solution**: 
@@ -109,14 +58,6 @@ chrome --remote-debugging-port=9222
 
 ### GitHub Actions
 
-#### API key not available
-```yaml
-- name: Authenticate
-  env:
-    TESTIVAI_API_KEY: ${{ secrets.TESTIVAI_API_KEY }}
-  run: testivai auth $TESTIVAI_API_KEY
-```
-
 #### Chrome not starting in CI
 ```yaml
 - name: Start Chrome
@@ -131,12 +72,17 @@ chrome --remote-debugging-port=9222
 ### Jenkins
 
 #### Environment variables not passed
+No credentials are needed — TestivAI runs entirely on disk. Set the mode and
+run in a single step so the environment survives:
+
 ```groovy
-withCredentials([string(credentialsId: 'testivai-api-key', variable: 'API_KEY')]) {
-  sh 'export TESTIVAI_API_KEY=$API_KEY'
+withEnv(['TESTIVAI_MODE=local']) {
   sh 'testivai run "npm test"'
 }
 ```
+
+Baselines live in `.testivai/baselines/` in the repo, so make sure the
+workspace is a full checkout rather than a shallow copy that excludes them.
 
 ## Performance Issues
 
@@ -147,32 +93,13 @@ withCredentials([string(credentialsId: 'testivai-api-key', variable: 'API_KEY')]
 3. **Disable animations** during tests
 4. **Reduce screenshot size** by testing specific components
 
+See also: [Stable Baselines](./stable-baselines.md) — a guide to freezing animations, using `ignoreSelectors` modes, and tuning tolerance to eliminate flaky diffs.
+
 ### Memory usage high
 
 - **Playwright**: Reuse browser context between tests
 - **Witness SDK**: Limit concurrent snapshots
 - **General**: Clear test data regularly
-
-## Network Issues
-
-### Upload timeouts
-
-**Symptoms**: Captures succeed but upload fails
-
-**Solutions**:
-1. Check internet connection
-2. Verify API key is valid
-3. Try reducing batch size
-4. Check if TestivAI service is operational
-
-### Proxy issues
-
-If behind a corporate proxy:
-```bash
-# Set proxy environment variables
-export HTTP_PROXY=http://proxy.company.com:8080
-export HTTPS_PROXY=http://proxy.company.com:8080
-```
 
 ## Debug Mode
 
@@ -180,38 +107,38 @@ Enable debug logging to troubleshoot issues:
 
 ### Playwright SDK
 ```bash
-DEBUG=testivai:* npx playwright test
+TESTIVAI_DEBUG=true npx playwright test
 ```
 
 ### Witness SDK
 ```bash
-DEBUG=testivai:* npm test
+TESTIVAI_DEBUG=true npm test
 # or
 testivai run "npm test" --debug
 ```
 
 ### What debug logs show:
-- API requests and responses
-- Capture progress
-- Network errors
-- Performance metrics
+Lines are prefixed with `[TestivAI]`:
+
+- The resolved configuration (project config, per-call overrides, effective config, local mode)
+- Which capture path was taken — browser full-page capture or scroll-and-stitch — and the page/viewport dimensions behind that choice
+- How many element styles were captured
+- DOM capture failures (which make the noise hint unavailable)
 
 ## Common Error Messages
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| "Invalid API key" | API key not set or invalid | Export TESTIVAI_API_KEY |
-| "Project not found" | Wrong project ID | Check dashboard for correct ID |
-| "Batch creation failed" | Network or auth issue | Check API key and connection |
+| "results.json not found" | Tests didn't run before `testivai report` | Run your test suite first (captures land in `.testivai/temp/`) |
 | "Browser connection failed" | Chrome not running | Start Chrome with --remote-debugging-port |
 | "Snapshot timeout" | Page loading too slow | Increase timeout or check page |
 
 ## Getting Help
 
 1. **Check debug logs** for detailed error information
-2. **Search existing issues** on [GitHub](https://github.com/testivai/testivai-monorepo/issues)
-3. **Join our Discord** for community support
-4. **Email support** at hello@testiv.ai
+2. **Search existing issues** on [GitHub](https://github.com/testivai/testivai-oss/issues)
+3. **Ask in [GitHub Discussions](https://github.com/testivai/testivai-oss/discussions)** for community support
+4. **Email** testivai.app@gmail.com
 
 When reporting issues, please include:
 - SDK version

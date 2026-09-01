@@ -17,3 +17,11 @@ coverage/
 .vscode/
 playwright-report/
 test-results/
+python/.venv/
+python/**/__pycache__/
+python/*.egg-info/
+java/target/
+
+# built ruby gem artifacts
+ruby/*.gem
+ruby/Gemfile.lock

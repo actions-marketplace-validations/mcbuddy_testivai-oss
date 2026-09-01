@@ -8,9 +8,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { exec } from 'child_process';
-import { compareAll, CompareOptions } from './compare';
-import { ReportData, ReportSummary } from './results';
+import { compareAll, type CompareOptions, type PassCriteria } from './compare';
+import type { ReportData, ReportSummary, SnapshotResult} from './results';
 import { renderHtml } from './template';
+import { loadLocalConfig } from '../config/local-config';
+import { BaselineStore } from '../baselines/store';
 
 export interface GenerateReportOptions {
   projectRoot: string;
@@ -22,6 +24,13 @@ export interface GenerateReportOptions {
   autoOpen?: boolean;
   /** SDK version string for the report header */
   version?: string;
+  /**
+   * Pass criteria overrides. When omitted, values are read from
+   * `.testivai/config.json` (maxDiffPercent, maxDiffPixels, noiseAutoPass,
+   * noiseMaxDiffPercent) so every adapter honors the project's tolerances
+   * without extra wiring.
+   */
+  passCriteria?: PassCriteria;
 }
 
 /**
@@ -35,13 +44,35 @@ export interface GenerateReportOptions {
  *
  * @returns The report data
  */
+/**
+ * results.json schema version. 2.3.0 adds top-level `missingBaselines[]`
+ * and `summary.missing` (baselines that received no capture this run — the
+ * coverage-loss signal). 2.2.0 added per-snapshot `regions[]` (clustered
+ * diff bounding boxes), `masks[]` (applied masks with their source — the
+ * audit trail), and `maskWarnings[]`. All additive.
+ */
+export const RESULTS_SCHEMA_VERSION = '2.3.0';
+
+/**
+ * Write results.json for an already-computed set of snapshot results.
+ * Exposed for callers that manage comparison and rendering separately.
+ */
+export function generateResults(
+  results: SnapshotResult[],
+  reportDir: string,
+  version: string = RESULTS_SCHEMA_VERSION,
+): void {
+  const data = buildReportData(results, version);
+  fs.writeFileSync(path.join(reportDir, 'results.json'), JSON.stringify(data, null, 2));
+}
+
 export function generateReport(options: GenerateReportOptions): ReportData {
   const {
     projectRoot,
     reportDir: reportDirRelative = 'visual-report',
     threshold = 0.1,
     autoOpen = true,
-    version = '2.0.0',
+    version = RESULTS_SCHEMA_VERSION,
   } = options;
 
   const reportDir = path.isAbsolute(reportDirRelative)
@@ -51,29 +82,37 @@ export function generateReport(options: GenerateReportOptions): ReportData {
   // Ensure report directory exists
   fs.mkdirSync(reportDir, { recursive: true });
 
-  // 1. Compare all snapshots
+  // 1. Compare all snapshots. Pass criteria default to the project's
+  // .testivai/config.json so tolerances follow the config file everywhere.
+  const localConfig = loadLocalConfig(projectRoot);
+  const passCriteria: PassCriteria = options.passCriteria ?? {
+    maxDiffPercent: localConfig.maxDiffPercent,
+    maxDiffPixels: localConfig.maxDiffPixels,
+    noiseAutoPass: localConfig.noiseAutoPass,
+    noiseMaxDiffPercent: localConfig.noiseMaxDiffPercent,
+    shiftTolerance: localConfig.shiftTolerance,
+  };
   const compareOptions: CompareOptions = {
     projectRoot,
     reportDir,
     threshold,
+    passCriteria,
+    mask: localConfig.mask,
+    diffRegions: localConfig.diffRegions,
+    volatileAttributes: localConfig.volatileAttributes,
   };
   const snapshots = compareAll(compareOptions);
 
-  // 2. Build summary
-  const summary: ReportSummary = {
-    total: snapshots.length,
-    passed: snapshots.filter((s) => s.status === 'passed').length,
-    changed: snapshots.filter((s) => s.status === 'changed').length,
-    newSnapshots: snapshots.filter((s) => s.status === 'new').length,
-  };
+  // 1.5. Coverage-loss signal: baselines that received no capture this run
+  // (a deleted/renamed test silently stops guarding its page). Reported
+  // always; gated only via `--fail-on-missing` / config `failOnMissing`,
+  // because filtered runs (`--grep`) legitimately skip most baselines.
+  const store = new BaselineStore(projectRoot);
+  const capturedNames = new Set(store.listTemp());
+  const missingBaselines = store.list().filter((n) => !capturedNames.has(n));
 
-  // 3. Build report data
-  const reportData: ReportData = {
-    version,
-    timestamp: new Date().toISOString(),
-    summary,
-    snapshots,
-  };
+  // 2-3. Build summary + report data
+  const reportData = buildReportData(snapshots, version, missingBaselines);
 
   // 4. Write results.json
   const resultsPath = path.join(reportDir, 'results.json');
@@ -90,6 +129,78 @@ export function generateReport(options: GenerateReportOptions): ReportData {
   }
 
   return reportData;
+}
+
+/** Assemble the ReportData envelope for a set of snapshot results. */
+function buildReportData(
+  snapshots: SnapshotResult[],
+  version: string,
+  missingBaselines: string[] = [],
+): ReportData {
+  const summary: ReportSummary = {
+    total: snapshots.length,
+    passed: snapshots.filter((s) => s.status === 'passed').length,
+    changed: snapshots.filter((s) => s.status === 'changed').length,
+    newSnapshots: snapshots.filter((s) => s.status === 'new').length,
+    missing: missingBaselines.length,
+  };
+  return {
+    version,
+    timestamp: new Date().toISOString(),
+    summary,
+    snapshots,
+    missingBaselines,
+  };
+}
+
+/**
+ * Build a single-file, shareable copy of the report: every report-relative
+ * image reference (`src` and the region-chip `data-diff` attributes) is
+ * inlined as a base64 data URI, so the resulting HTML can be dropped into
+ * Slack, an issue, or an email with nothing else attached.
+ *
+ * Reads `<reportDir>/index.html`, writes `<reportDir>/share.html`, and
+ * returns the absolute path of the share file.
+ */
+export function generateShareFile(reportDir: string): string {
+  const indexPath = path.join(reportDir, 'index.html');
+  const html = fs.readFileSync(indexPath, 'utf-8');
+
+  const inlined = html.replace(
+    /(src|data-diff)="(images\/[^"]+)"/g,
+    (match, attr: string, rel: string) => {
+      try {
+        const abs = path.join(reportDir, rel);
+        const data = fs.readFileSync(abs);
+        return `${attr}="data:image/png;base64,${data.toString('base64')}"`;
+      } catch {
+        return match; // missing image: leave the reference as-is
+      }
+    },
+  );
+
+  const sharePath = path.join(reportDir, 'share.html');
+  fs.writeFileSync(sharePath, inlined);
+  return sharePath;
+}
+
+/**
+ * Storage-agnostic share upload: run the user's configured shell command
+ * (from `.testivai/config.json` `shareUploadCommand`) with `{file}` replaced
+ * by the share file's path. The last non-empty stdout line is returned as
+ * the shared URL — so `aws s3 cp … && echo https://…`, `gsutil`, `rclone`,
+ * or a plain `curl` all work without TestivAI shipping any cloud SDK.
+ *
+ * Returns the URL string, or null when the command produced no output.
+ * Throws on a non-zero exit (caller decides how loud to be).
+ */
+export function uploadShareFile(commandTemplate: string, sharePath: string): string | null {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { execSync } = require('child_process') as typeof import('child_process');
+  const command = commandTemplate.split('{file}').join(JSON.stringify(sharePath));
+  const stdout = execSync(command, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'inherit'] });
+  const lines = stdout.split('\n').map((l: string) => l.trim()).filter(Boolean);
+  return lines.length > 0 ? lines[lines.length - 1] : null;
 }
 
 /**

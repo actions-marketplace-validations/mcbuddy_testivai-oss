@@ -4,13 +4,21 @@
 
 Security fixes are applied to the latest minor version of each currently published package. Older versions are not patched; please upgrade.
 
-| Package | Supported |
-|---|---|
-| `@testivai/witness` | latest minor |
-| `@testivai/witness-playwright` | latest minor |
-| `@testivai/witness-webdriverio` | latest minor |
-| `@testivai/common` | latest minor |
-| `testivai-action` (GitHub Action) | latest `v1` major tag |
+| Package | Registry | Supported |
+|---|---|---|
+| `@testivai/witness` | npm | latest minor |
+| `@testivai/witness-playwright` | npm | latest minor |
+| `@testivai/witness-selenium` | npm | latest minor |
+| `@testivai/witness-webdriverio` | npm | latest minor |
+| `@testivai/mcp` | npm | latest minor |
+| `testivai` | PyPI | latest minor |
+| `testivai` | RubyGems | latest minor |
+| TestivAI GitHub Action | this repo | latest `v1` major tag |
+
+The Java adapter under [`java/`](./java) is experimental and is **not
+published to any registry** — it is built from source with `mvn install`.
+Reports against it are welcome and will be fixed in-tree, but there is no
+released artifact to patch.
 
 ## Reporting a Vulnerability
 
@@ -43,15 +51,14 @@ Public disclosure of the vulnerability happens **after** a patched release is av
 In scope:
 
 - Code in this repository
-- Published npm packages listed above
-- The `testivai-action` GitHub Action
+- The published packages listed above, on npm, PyPI and RubyGems
+- The TestivAI GitHub Action
 
-Out of scope (please report to the cloud service team separately):
+Out of scope:
 
-- The TestivAI hosted service (`*.testiv.ai`)
-- The TestivAI Dashboard
+- The testiv.ai website (static marketing/docs pages — no user data is processed there)
 - Issues in third-party dependencies (please report upstream first)
-- Social engineering, physical attacks, denial-of-service against TestivAI infrastructure
+- Social engineering or physical attacks
 
 ## Safe Harbor
 

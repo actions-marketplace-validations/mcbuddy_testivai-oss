@@ -19,8 +19,75 @@
  * API instead of fighting Chrome-launch coordination.
  */
 
-import { BaselineStore } from '@testivai/witness';
+import { BaselineStore, loadLocalConfig } from '@testivai/witness';
 import type { WitnessBrowser, WitnessOptions } from './types';
+
+/** id of the style element injected for the duration of a capture */
+const STYLE_ID = '__testivai_capture_css__';
+
+/**
+ * Freezes CSS animations/transitions, hides the caret, and forces instant
+ * scrolling — the top causes of flaky visual diffs. Mirrors the Playwright
+ * adapter's STABILIZE_CSS.
+ */
+const STABILIZE_CSS =
+  '*, *::before, *::after { animation-duration: 0.001s !important; animation-delay: 0s !important; ' +
+  'animation-iteration-count: 1 !important; transition-duration: 0.001s !important; ' +
+  'transition-delay: 0s !important; caret-color: transparent !important; scroll-behavior: auto !important; }';
+
+/** Build the ignoreSelectors CSS block (visibility preserves layout). */
+function buildIgnoreCss(selectors: string[]): string {
+  return selectors.map((s) => `${s} { visibility: hidden !important; }`).join('\n');
+}
+
+/**
+ * Inject a <style> tag with the given CSS. Returns true when injection
+ * succeeded. Uses the inline-string form of execute for WDIO 8/9 parity.
+ */
+async function injectCaptureCss(browser: WitnessBrowser, css: string): Promise<boolean> {
+  try {
+    await browser.execute(
+      `var el = document.createElement('style');` +
+        `el.id = ${JSON.stringify(STYLE_ID)};` +
+        `el.textContent = ${JSON.stringify(css)};` +
+        `document.head.appendChild(el);`,
+    );
+    return true;
+  } catch {
+    return false; // capture proceeds without stabilization/ignores
+  }
+}
+
+async function removeCaptureCss(browser: WitnessBrowser): Promise<void> {
+  try {
+    await browser.execute(
+      `var el = document.getElementById(${JSON.stringify(STYLE_ID)});` +
+        `if (el) el.remove();`,
+    );
+  } catch {
+    // best-effort cleanup
+  }
+}
+
+/**
+ * Wait (bounded at ~3s) for web fonts to finish loading so the capture never
+ * shows a fallback font. Polled from Node because classic WebDriver execute
+ * does not await page-side promises.
+ */
+async function waitForFonts(browser: WitnessBrowser): Promise<void> {
+  const deadline = Date.now() + 3000;
+  for (;;) {
+    try {
+      const status = await browser.execute<string>(
+        `return document.fonts ? document.fonts.status : 'loaded';`,
+      );
+      if (status !== 'loading' || Date.now() >= deadline) return;
+    } catch {
+      return; // no FontFaceSet or execute failed — proceed
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+}
 
 /**
  * Capture a screenshot + DOM and write them as a temp snapshot.
@@ -43,8 +110,39 @@ export async function witness(
     throw new Error('testivai.witness: browser argument must expose takeScreenshot()');
   }
 
+  // Multi-capability runs: fold the variant into the name so capabilities
+  // don't overwrite each other's baselines (same mechanism as the Playwright
+  // adapter's multi-project handling).
+  if (options.variant) {
+    name = `${name}__${options.variant.replace(/[^a-z0-9_-]+/gi, '_').toLowerCase()}`;
+  }
+
+  // 0. Prepare the page: stabilization CSS (animations/caret/fonts — the
+  //    flake killers) + ignoreSelectors from config.json and this call,
+  //    injected as one style tag and removed after the capture.
+  const localConfig = loadLocalConfig(process.cwd());
+  const stabilize = options.stabilize ?? localConfig.stabilize;
+  const ignoreSelectors = [
+    ...new Set([...(localConfig.ignoreSelectors ?? []), ...(options.ignoreSelectors ?? [])]),
+  ];
+
+  const cssParts: string[] = [];
+  if (stabilize) cssParts.push(STABILIZE_CSS);
+  if (ignoreSelectors.length > 0) cssParts.push(buildIgnoreCss(ignoreSelectors));
+
+  let injected = false;
+  if (cssParts.length > 0 && typeof browser.execute === 'function') {
+    injected = await injectCaptureCss(browser, cssParts.join('\n'));
+    if (stabilize) await waitForFonts(browser);
+  }
+
   // 1. Capture screenshot (base64 PNG → Buffer)
-  const base64 = await browser.takeScreenshot();
+  let base64: string;
+  try {
+    base64 = await browser.takeScreenshot();
+  } finally {
+    if (injected) await removeCaptureCss(browser);
+  }
   if (typeof base64 !== 'string' || base64.length === 0) {
     throw new Error(`testivai.witness("${name}"): browser.takeScreenshot() returned an empty value`);
   }
@@ -56,9 +154,14 @@ export async function witness(
     try {
       const result = await browser.execute<string>(
         // Inline string form for maximum WDIO sync/async compatibility.
-        // The function-form across WDIO 8/9 has subtle typing differences;
-        // the string form is stable.
-        'return document.documentElement.outerHTML;',
+        // ignoreSelectors excludes elements from the pixel diff, so they
+        // are excluded from the DOM/text signal too (consistent semantic).
+        `var clone = document.documentElement.cloneNode(true);` +
+          `var sels = ${JSON.stringify(ignoreSelectors)};` +
+          `for (var i = 0; i < sels.length; i++) {` +
+          ` try { clone.querySelectorAll(sels[i]).forEach(function(el){ el.remove(); }); } catch (e) {}` +
+          `}` +
+          `return clone.outerHTML;`,
       );
       if (typeof result === 'string' && result.length > 0) {
         dom = result;

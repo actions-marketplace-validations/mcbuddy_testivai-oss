@@ -9,9 +9,7 @@ import {
   loadLocalConfig,
   createDefaultConfig,
   localConfigExists,
-  isLocalMode,
   getConfigPath,
-  getDefaultConfig,
 } from '../config/local-config';
 
 describe('Local Config', () => {
@@ -29,7 +27,6 @@ describe('Local Config', () => {
     it('should return defaults when config file is missing', () => {
       const config = loadLocalConfig(tmpDir);
 
-      expect(config.mode).toBe('local');
       expect(config.threshold).toBe(0.1);
       expect(config.autoOpen).toBe(true);
       expect(config.failOnDiff).toBe(false);
@@ -42,16 +39,27 @@ describe('Local Config', () => {
       fs.mkdirSync(configDir, { recursive: true });
       fs.writeFileSync(
         path.join(configDir, 'config.json'),
-        JSON.stringify({ mode: 'cloud', threshold: 0.05 }),
+        JSON.stringify({ threshold: 0.05 }),
       );
 
       const config = loadLocalConfig(tmpDir);
 
-      expect(config.mode).toBe('cloud');
       expect(config.threshold).toBe(0.05);
       // Defaults for non-specified fields
       expect(config.autoOpen).toBe(true);
       expect(config.failOnDiff).toBe(false);
+    });
+
+    it('tolerates the retired mode field in configs written by older versions', () => {
+      const configDir = path.join(tmpDir, '.testivai');
+      fs.mkdirSync(configDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(configDir, 'config.json'),
+        JSON.stringify({ mode: 'local', threshold: 0.05 }),
+      );
+
+      const config = loadLocalConfig(tmpDir);
+      expect(config.threshold).toBe(0.05);
     });
   });
 
@@ -65,11 +73,9 @@ describe('Local Config', () => {
       const raw = fs.readFileSync(configPath, 'utf-8');
       const parsed = JSON.parse(raw);
 
-      expect(parsed.mode).toBe('local');
       expect(parsed.failOnDiff).toBe(true);
       expect(parsed.threshold).toBe(0.1);
 
-      expect(config.mode).toBe('local');
       expect(config.failOnDiff).toBe(true);
     });
   });
@@ -82,22 +88,6 @@ describe('Local Config', () => {
     it('should return true after creating config', () => {
       createDefaultConfig(tmpDir);
       expect(localConfigExists(tmpDir)).toBe(true);
-    });
-  });
-
-  describe('isLocalMode()', () => {
-    it('should return false when no config exists', () => {
-      expect(isLocalMode(tmpDir)).toBe(false);
-    });
-
-    it('should return true when mode is local', () => {
-      createDefaultConfig(tmpDir, { mode: 'local' });
-      expect(isLocalMode(tmpDir)).toBe(true);
-    });
-
-    it('should return false when mode is cloud', () => {
-      createDefaultConfig(tmpDir, { mode: 'cloud' });
-      expect(isLocalMode(tmpDir)).toBe(false);
     });
   });
 
@@ -156,5 +146,43 @@ describe('Local Config', () => {
       expect(config.failOnDiff).toBe(true);
       expect(config.ignoreSelectors).toEqual(['.badge']);
     });
+  });
+});
+
+describe('mask + diffRegions config (additive, back-compat)', () => {
+  const fs = require('fs');
+  const os = require('os');
+  const path = require('path');
+  const { loadLocalConfig } = require('../config/local-config');
+
+  function withConfig(config: object, fn: (root: string) => void) {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'testivai-cfg-'));
+    fs.mkdirSync(path.join(root, '.testivai'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.testivai', 'config.json'), JSON.stringify(config));
+    try { fn(root); } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  }
+
+  it('configs written before masks existed load unchanged', () => {
+    withConfig({ threshold: 0.2, ignoreSelectors: ['.ad'] }, (root) => {
+      const cfg = loadLocalConfig(root);
+      expect(cfg.threshold).toBe(0.2);
+      expect(cfg.ignoreSelectors).toEqual(['.ad']);
+      expect(cfg.mask).toBeUndefined();
+      expect(cfg.diffRegions).toBeUndefined();
+    });
+  });
+
+  it('mask and diffRegions parse when present', () => {
+    withConfig(
+      {
+        mask: ['#banner', { x: 0, y: 0, width: '50%', height: 40 }, { top: 24 }],
+        diffRegions: { minSize: 20, mergeDistance: 6 },
+      },
+      (root) => {
+        const cfg = loadLocalConfig(root);
+        expect(cfg.mask).toHaveLength(3);
+        expect(cfg.diffRegions).toEqual({ minSize: 20, mergeDistance: 6 });
+      },
+    );
   });
 });

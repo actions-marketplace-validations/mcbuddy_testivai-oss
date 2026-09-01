@@ -2,8 +2,36 @@
  * Tests for comment builder
  */
 
-import { buildComment, buildEmptyComment } from '../comment';
-import { ResultsData } from '../types';
+import { buildComment, buildEmptyComment, resolveUpsertMarker, UPSERT_MARKER } from '../comment';
+import { STATUS_CONTEXT } from '../status';
+import type { ResultsData } from '../types';
+
+describe('resolveUpsertMarker', () => {
+  it('returns the legacy bare marker for the default status context', () => {
+    expect(resolveUpsertMarker(STATUS_CONTEXT)).toBe('<!-- testivai-visual-report -->');
+  });
+
+  it('namespaces the marker with a custom status context', () => {
+    expect(resolveUpsertMarker('TestivAI / visual (pytest)'))
+      .toBe('<!-- testivai-visual-report:TestivAI / visual (pytest) -->');
+  });
+
+  it('keeps the legacy marker out of namespaced comment bodies (no cross-lane upsert match)', () => {
+    const namespaced = resolveUpsertMarker('TestivAI / e2e');
+    expect(namespaced.includes(UPSERT_MARKER)).toBe(false);
+  });
+
+  it('markers of prefix-related contexts do not match each other', () => {
+    const short = resolveUpsertMarker('TestivAI / A');
+    const long = resolveUpsertMarker('TestivAI / A (mobile)');
+    expect(long.includes(short)).toBe(false);
+  });
+
+  it('sanitizes characters that would break the HTML comment', () => {
+    expect(resolveUpsertMarker('a -- b')).toBe('<!-- testivai-visual-report:a - b -->');
+    expect(resolveUpsertMarker('a <b> c')).toBe('<!-- testivai-visual-report:a b c -->');
+  });
+});
 
 describe('buildComment', () => {
   it('T6.1 - includes TestivAI Visual Report header', () => {
@@ -14,7 +42,7 @@ describe('buildComment', () => {
     };
 
     const comment = buildComment(results);
-    expect(comment).toContain('### 🔍 TestivAI Visual Report');
+    expect(comment).toContain('### TestivAI Visual Report');
   });
 
   it('T6.2 - includes upsert marker', () => {
@@ -36,9 +64,9 @@ describe('buildComment', () => {
     };
 
     const comment = buildComment(results);
-    expect(comment).toContain('✅ **2 passed**');
-    expect(comment).toContain('⚠️ **2 changed**');
-    expect(comment).toContain('🆕 **1 new**');
+    expect(comment).toContain('**2 passed**');
+    expect(comment).toContain('**2 changed**');
+    expect(comment).toContain('**1 new**');
   });
 
   it('T6.4 - includes details with approve command for changed snapshots', () => {
@@ -53,8 +81,8 @@ describe('buildComment', () => {
     const comment = buildComment(results);
     expect(comment).toContain('homepage');
     expect(comment).toContain('12.50% different');
-    expect(comment).toContain('npx testivai approve "homepage"');
-    expect(comment).toContain('npx testivai approve --all');
+    expect(comment).toContain('/testivai approve homepage');
+    expect(comment).toContain('/testivai approve --all');
   });
 
   it('T6.5 - no details sections when all passed', () => {
@@ -76,6 +104,18 @@ describe('buildComment', () => {
   it('T6.6 - empty results has graceful message', () => {
     const comment = buildEmptyComment();
     expect(comment).toContain('No visual snapshots were captured');
+  });
+
+  it('embeds a custom upsert marker when provided', () => {
+    const results: ResultsData = {
+      timestamp: Date.now(),
+      summary: { total: 0, passed: 0, changed: 0, newSnapshots: 0 },
+      snapshots: [],
+    };
+    const marker = resolveUpsertMarker('TestivAI / visual (pytest)');
+
+    expect(buildComment(results, undefined, marker)).toContain(marker);
+    expect(buildEmptyComment(undefined, marker)).toContain(marker);
   });
 
   it('renders new-snapshots section when present', () => {
@@ -165,8 +205,8 @@ describe('buildComment', () => {
         ],
       };
       const comment = buildComment(results);
-      expect(comment).not.toContain('DOM unchanged');
-      expect(comment).not.toContain('DOM changed');
+      expect(comment).not.toContain('**DOM unchanged**');
+      expect(comment).not.toContain('**DOM changed**');
     });
 
     it('singular vs plural attribute-change wording', () => {
@@ -182,5 +222,62 @@ describe('buildComment', () => {
       expect(buildWith(1)).not.toContain('1 attribute changes');
       expect(buildWith(3)).toContain('3 attribute changes');
     });
+  });
+});
+
+describe('verdict lines in the PR comment (layered analysis)', () => {
+  const base = {
+    timestamp: 0,
+    summary: { total: 1, passed: 0, changed: 1, newSnapshots: 0 },
+  };
+
+  it('style-only change renders as real-not-noise with the element name', () => {
+    const comment = buildComment({
+      ...base,
+      snapshots: [{
+        name: 'cta', status: 'changed', diffPercent: 2.1,
+        dom: { changed: false, noiseHint: false, summary: null, styleCheck: 'mismatch', styleChanges: { count: 1, elements: ['main > button.cta'] } },
+      }],
+    } as any);
+    expect(comment).toContain('Style-only change — real, not noise');
+    expect(comment).toContain('button.cta');
+    expect(comment).not.toContain('DOM unchanged');
+  });
+
+  it('pageShift renders the look-above guidance', () => {
+    const comment = buildComment({
+      ...base,
+      snapshots: [{
+        name: 'home', status: 'changed', diffPercent: 12,
+        pageShift: { dy: 24, belowY: 80, count: 17 },
+        dom: { changed: true, noiseHint: false, summary: { added: 1, removed: 0, attributeChanges: 0 } },
+      }],
+    } as any);
+    expect(comment).toContain('Layout shift');
+    expect(comment).toContain('below y=80 moved down 24px');
+    expect(comment).toContain('DOM changed');
+  });
+
+  it('missing baselines are surfaced as a coverage warning', () => {
+    const comment = buildComment({
+      timestamp: 0,
+      summary: { total: 1, passed: 1, changed: 0, newSnapshots: 0, missing: 2 },
+      snapshots: [{ name: 'ok', status: 'passed', diffPercent: 0 }],
+      missingBaselines: ['pricing', 'checkout'],
+    } as any);
+    expect(comment).toContain('2 baselines received no capture');
+    expect(comment).toContain('`pricing`');
+    expect(comment).toContain('coverage just shrank');
+  });
+
+  it('older results.json without new fields still renders (backcompat)', () => {
+    const comment = buildComment({
+      ...base,
+      snapshots: [{
+        name: 'legacy', status: 'changed', diffPercent: 1,
+        dom: { changed: false, noiseHint: true, summary: null },
+      }],
+    } as any);
+    expect(comment).toContain('DOM unchanged');
   });
 });

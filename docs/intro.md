@@ -17,7 +17,7 @@ Add visual regression testing to your test suite in under 5 minutes — fully lo
 
 ## Path A — Dedicated adapters (recommended)
 
-Two frameworks have first-class adapter packages today: **Playwright** and **WebdriverIO**. They use the framework's native screenshot APIs — no CLI wrapper, no Chrome remote debugging port, no race conditions.
+Most suites have a first-class adapter today: **Playwright**, **WebdriverIO**, **Selenium** (JavaScript, Python, Java), and **Ruby** (Capybara / RSpec). They use the framework's native screenshot APIs — no CLI wrapper, no Chrome remote debugging port, no race conditions.
 
 ### Playwright
 
@@ -30,20 +30,45 @@ npm install -D @testivai/witness-playwright @playwright/test
 npx playwright install chromium
 ```
 
-### 2. Enable local mode
+### 2. (Optional) Customize settings
 
-Create `.testivai/config.json` at your project root:
+The reporter compares locally and writes an HTML report with zero configuration — **no account, no API key, nothing uploaded.**
+
+If you want to tune tolerances or change the report output directory, create `.testivai/config.json` at your project root:
 
 ```json
 {
-  "mode": "local",
   "threshold": 0.1,
   "reportDir": "visual-report",
   "autoOpen": false
 }
 ```
 
-This tells the reporter to compare locally and write an HTML report instead of uploading to the cloud. **No API key required.**
+Optional tolerance and capture settings (all have safe defaults):
+
+| Field | Default | What it does |
+|---|---|---|
+| `maxDiffPercent` | `0` | Diffs at or below this percentage report as **passed** — your team's tolerance dial |
+| `maxDiffPixels` | unset | Absolute variant: pass when changed-pixel count is at or below this |
+| `noiseAutoPass` | `false` | Auto-pass diffs whose DOM is structurally identical (the noise hint), up to `noiseMaxDiffPercent` |
+| `noiseMaxDiffPercent` | `1` | Upper bound (diff %) for `noiseAutoPass` |
+| `stabilize` | `true` | Freeze animations/transitions, hide the caret, and wait for web fonts before every capture |
+| `ignoreSelectors` | `[]` | Elements hidden (`visibility: hidden`) during capture — timestamps, ads, live widgets |
+| `mask` | `[]` | Areas excluded from the pixel diff and hatched in the report — selectors or geometric regions ([details](./comparison.md)) |
+| `diffRegions` | `{minSize: 10, mergeDistance: 12}` | Diff clustering tunables: noise floor + merge gap ([details](./comparison.md)) |
+| `shiftTolerance` | unset | Pass diffs that are pure vertical shifts up to N pixels — content moved, nothing changed |
+| `volatileAttributes` | `[]` | Attributes whose *value* is ignored by the DOM diff (presence still counts) |
+| `baselinesDir` | `.testivai/baselines` | Where baselines live; supports a `{platform}` token for per-OS baselines |
+| `failOnDiff` | `false` | Exit non-zero on changes without passing `--fail-on-diff` |
+| `failOnMissing` | `true` | Exit 3 when a committed baseline receives no capture (silent coverage loss) |
+| `shareUploadCommand` | unset | Command template run by `report --share` to push `share.html` to your own storage |
+
+Crawler-only fields, used by `testivai witness <url>`: `pages`, `maxPages` (default 10), `viewport` (default 1280×800).
+
+The full list with types lives in `LocalConfig` — see
+[`packages/witness/src/config/local-config.ts`](https://github.com/testivai/testivai-oss/blob/main/packages/witness/src/config/local-config.ts).
+
+Auto-passed snapshots keep their diff image and are labeled in the report and in `results.json` (`autoPassed: "threshold" | "noise" | "shift"`), so tolerance never hides information — it just stops demanding review for changes you've declared acceptable.
 
 ### 3. Add the reporter
 
@@ -87,6 +112,13 @@ npx playwright test
 npm install -D @testivai/witness @testivai/witness-webdriverio
 ```
 
+Create `.testivai/config.json` at your project root — the WebdriverIO service
+only writes a report when it finds this file:
+
+```json
+{}
+```
+
 Add the service to `wdio.conf.ts`:
 
 ```ts
@@ -110,13 +142,46 @@ it('homepage looks correct', async () => {
 
 Same `.testivai/baselines/` layout, same HTML report, same approval workflow as the Playwright lane.
 
-→ See the full [WebdriverIO quickstart](./frameworks/webdriverio.md) for service options + cloud-mode caveat.
+→ See the full [WebdriverIO quickstart](./frameworks/webdriverio.md) for service options.
+
+### Ruby (Capybara / RSpec)
+
+```ruby
+# Gemfile
+gem "testivai", group: :test
+```
+
+```ruby
+require "testivai"
+
+RSpec.describe "Homepage", type: :feature, js: true do
+  it "looks right" do
+    visit "/"
+    Testivai.witness(page, "homepage")
+  end
+end
+```
+
+Run your suite exactly as you do today, then compare:
+
+```bash
+bundle exec rspec
+npx testivai report
+```
+
+→ See the full [Ruby quickstart](./frameworks/ruby.md) for options and driver notes.
+
+### Selenium, Python, Java
+
+Native adapters share the same baselines and report — see
+[Selenium](./frameworks/selenium.md), [Python](./frameworks/python.md), and
+[Java](./frameworks/java.md).
 
 ---
 
 ## Path B — Other Frameworks (experimental)
 
-For Cypress, Puppeteer, Selenium, pytest, RSpec, Robot, etc., use the framework-agnostic CLI from `@testivai/witness`. It wraps your test command and captures via Chrome's DevTools Protocol.
+For Cypress, Puppeteer, Robot Framework and similar, use the framework-agnostic CLI from `@testivai/witness`. It wraps your test command and captures via Chrome's DevTools Protocol.
 
 :::warning Experimental
 This sidecar mode is labeled experimental — launch coordination across frameworks is brittle. For Playwright and WebdriverIO, prefer the dedicated adapters above. See [the sidecar caveats](./sidecar-testivai-run.md) for the full picture, and [community adapter contract](./extension-api.md) if you'd like to write a proper adapter for your framework.
@@ -189,32 +254,14 @@ visual-report/
 
 ---
 
-## Optional — Cloud Mode
-
-If you want AI-powered change analysis (REVEAL Engine™), a hosted dashboard, and a team approval workflow, opt into [TestivAI Cloud](https://testiv.ai):
-
-```bash
-export TESTIVAI_API_KEY=your-api-key
-```
-
-Or store it locally for the witness CLI:
-
-```bash
-npx testivai auth <your-api-key>
-```
-
-:::warning Shell environment variables only
-TestivAI SDKs read configuration from **shell environment variables only**. `.env` files and `dotenv` are not loaded.
-:::
-
-When `TESTIVAI_API_KEY` is set, runs upload evidence to the cloud instead of generating a local report. Removing the variable (or removing it from CI) reverts to local mode automatically.
-
----
-
 ## What's Next
 
 - **[How It Works](./how-it-works.md)** — local pipeline, capture layers, diff algorithm
-- **[OSS vs Cloud](./oss-vs-cloud.md)** — capability matrix
+- **[vs. Playwright's built-in](./vs-playwright-builtin.md)** — honest comparison with `toHaveScreenshot()`
+- **[vs. rolling your own (Selenium)](./vs-selenium-tooling.md)** — for Selenium suites, where there is no built-in
+- **[Philosophy](./philosophy.md)** — local-first detection, bring-your-own-model AI
+- **[MCP server](./mcp.md)** — hand your agent the evidence; your model does the reasoning
+- **[Maintenance & roadmap](./maintenance.md)** — who builds this, cadence, and what happens if it stops
 - **[Playwright adapter](./frameworks/playwright.md)** / **[WebdriverIO adapter](./frameworks/webdriverio.md)**
 - **[GitHub Action](./github-action.md)** — post results to PRs
 - **[Extension API](./extension-api.md)** — write a community adapter for your framework

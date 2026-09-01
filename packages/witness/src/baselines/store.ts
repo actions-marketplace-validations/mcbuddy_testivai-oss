@@ -15,6 +15,37 @@
 import * as fs from 'fs';
 import * as path from 'path';
 
+/**
+ * Resolve the baselines directory: explicit override → config.json
+ * `baselinesDir` → the default `.testivai/baselines`.
+ *
+ * A literal `{platform}` token is replaced with `process.platform`
+ * (darwin / linux / win32), giving cross-platform teams per-OS baselines
+ * without any wrapper scripts:
+ *
+ *   { "baselinesDir": ".testivai/baselines-{platform}" }
+ *
+ * mac devs and linux CI then gate against their own renders, instead of
+ * flagging every snapshot on font-rasterization differences.
+ */
+export function resolveBaselinesDir(projectRoot: string, override?: string): string {
+  let dir = override;
+  if (!dir) {
+    try {
+      const raw = fs.readFileSync(path.join(projectRoot, '.testivai', 'config.json'), 'utf-8');
+      const cfg = JSON.parse(raw);
+      if (typeof cfg.baselinesDir === 'string' && cfg.baselinesDir.length > 0) {
+        dir = cfg.baselinesDir;
+      }
+    } catch {
+      // no config / malformed → default
+    }
+  }
+  if (!dir) dir = path.join('.testivai', 'baselines');
+  dir = dir.split('{platform}').join(process.platform);
+  return path.isAbsolute(dir) ? dir : path.join(projectRoot, dir);
+}
+
 export interface BaselineMetadata {
   name: string;
   createdAt: string;
@@ -28,8 +59,8 @@ export class BaselineStore {
   private readonly baselinesDir: string;
   private readonly tempDir: string;
 
-  constructor(private readonly projectRoot: string) {
-    this.baselinesDir = path.join(projectRoot, '.testivai', 'baselines');
+  constructor(readonly projectRoot: string, baselinesDirOverride?: string) {
+    this.baselinesDir = resolveBaselinesDir(projectRoot, baselinesDirOverride);
     this.tempDir = path.join(projectRoot, '.testivai', 'temp');
   }
 
@@ -124,6 +155,8 @@ export class BaselineStore {
     const currentMetadata = this.getBaselineMetadataPath(name);
     const currentDom = this.getBaselineDomPath(name);
     const tempDom = this.getTempDomPath(name);
+    const currentElements = path.join(this.getBaselineDir(name), 'elements.json');
+    const tempElements = path.join(this.getTempDir(), name, 'elements.json');
 
     // Backup current baseline if it exists
     if (fs.existsSync(currentScreenshot)) {
@@ -134,6 +167,9 @@ export class BaselineStore {
       }
       if (fs.existsSync(currentDom)) {
         fs.copyFileSync(currentDom, path.join(previousDir, 'dom.html'));
+      }
+      if (fs.existsSync(currentElements)) {
+        fs.copyFileSync(currentElements, path.join(previousDir, 'elements.json'));
       }
     }
 
@@ -147,6 +183,13 @@ export class BaselineStore {
       // than keep an inconsistent pair.
       fs.rmSync(currentDom);
     }
+    if (fs.existsSync(tempElements)) {
+      fs.copyFileSync(tempElements, currentElements);
+    } else if (fs.existsSync(currentElements)) {
+      // Same stale-drop semantics as dom.html: an element map from an
+      // older approval must not attribute regions against a new baseline.
+      fs.rmSync(currentElements);
+    }
 
     // Update metadata
     const now = new Date().toISOString();
@@ -158,6 +201,29 @@ export class BaselineStore {
       approvedBy: 'local',
     };
     fs.writeFileSync(currentMetadata, JSON.stringify(meta, null, 2));
+  }
+
+  /**
+   * Find the baseline name whose `.previous/screenshot.png` has the newest
+   * modification time. Returns null when no baseline has a `.previous/` backup.
+   */
+  findLatestUndoable(): string | null {
+    if (!fs.existsSync(this.baselinesDir)) return null;
+    let latestName: string | null = null;
+    let latestMtime = 0;
+    for (const entry of fs.readdirSync(this.baselinesDir)) {
+      const entryPath = path.join(this.baselinesDir, entry);
+      if (!fs.statSync(entryPath).isDirectory()) continue;
+      const prevScreenshot = path.join(entryPath, '.previous', 'screenshot.png');
+      if (fs.existsSync(prevScreenshot)) {
+        const mtime = fs.statSync(prevScreenshot).mtimeMs;
+        if (mtime > latestMtime) {
+          latestMtime = mtime;
+          latestName = entry;
+        }
+      }
+    }
+    return latestName;
   }
 
   /**

@@ -10,7 +10,7 @@ import {
   generateConfig,
   generateCypressConfig,
 } from '../utils/template-generator';
-import { createDefaultConfig } from '../config/local-config';
+import { createDefaultConfig, localConfigExists } from '../config/local-config';
 
 const LANGUAGE_CHOICES = [
   { name: 'JavaScript / TypeScript', value: 'javascript' },
@@ -56,20 +56,20 @@ const TEST_DIR_DEFAULTS: Record<string, string> = {
 };
 
 const NEXT_STEPS: Record<string, string[]> = {
-  'cypress':           ['1. npx testivai auth <your-api-key>', "2. Add cy.witness('name') to your tests", '3. npx testivai run "cypress run --browser chrome"'],
-  'selenium-js':       ['1. npx testivai auth <your-api-key>', "2. Use witness(driver, 'name') in your tests", '3. npx testivai run "npx jest tests/"'],
-  'webdriverio':       ['1. npx testivai auth <your-api-key>', "2. Add browser.witness('name') to your tests", '3. npx testivai run "npx wdio run wdio.conf.js"'],
-  'puppeteer':         ['1. npx testivai auth <your-api-key>', "2. Use witness(page, 'name') in your tests", '3. npx testivai run "npx jest tests/"'],
-  'selenium-pytest':   ['1. npx testivai auth <your-api-key>', "2. Use witness(driver, 'name') in your tests", '3. npx testivai run "pytest tests/ -v"'],
-  'selenium-unittest': ['1. npx testivai auth <your-api-key>', "2. Use witness(self.driver, 'name') in tests", '3. npx testivai run "python -m unittest discover tests/"'],
-  'robot-framework':   ['1. npx testivai auth <your-api-key>', '2. Use the Witness keyword in your robot tests', '3. npx testivai run "robot tests/"'],
-  'selenium-junit':    ['1. npx testivai auth <your-api-key>', '2. Use TestivAIWitness.witness(driver, "name")', '3. npx testivai run "mvn test"'],
-  'selenium-testng':   ['1. npx testivai auth <your-api-key>', '2. Use TestivAIWitness.witness(driver, "name")', '3. npx testivai run "mvn test"'],
-  'rspec-capybara':    ['1. npx testivai auth <your-api-key>', "2. Include TestivaiWitness and call witness('name')", '3. npx testivai run "bundle exec rspec"'],
-  'cucumber-capybara': ['1. npx testivai auth <your-api-key>', '2. Use the "page looks correct" step in features', '3. npx testivai run "bundle exec cucumber"'],
+  'cypress':           ["1. Add cy.witness('name') to your tests", '2. npx testivai run "cypress run --browser chrome"'],
+  'selenium-js':       ["1. Use witness(driver, 'name') in your tests", '2. npx testivai run "npx jest tests/"'],
+  'webdriverio':       ["1. Add browser.witness('name') to your tests", '2. npx testivai run "npx wdio run wdio.conf.js"'],
+  'puppeteer':         ["1. Use witness(page, 'name') in your tests", '2. npx testivai run "npx jest tests/"'],
+  'selenium-pytest':   ["1. Use witness(driver, 'name') in your tests", '2. npx testivai run "pytest tests/ -v"'],
+  'selenium-unittest': ["1. Use witness(self.driver, 'name') in tests", '2. npx testivai run "python -m unittest discover tests/"'],
+  'robot-framework':   ['1. Use the Witness keyword in your robot tests', '2. npx testivai run "robot tests/"'],
+  'selenium-junit':    ['1. Use TestivAIWitness.witness(driver, "name")', '2. npx testivai run "mvn test"'],
+  'selenium-testng':   ['1. Use TestivAIWitness.witness(driver, "name")', '2. npx testivai run "mvn test"'],
+  'rspec-capybara':    ['1. Add `gem "testivai", group: :test` to your Gemfile', "2. Call Testivai.witness(page, 'name') in a spec", '3. bundle exec rspec  &&  npx testivai report'],
+  'cucumber-capybara': ['1. Add `gem "testivai", group: :test` to your Gemfile', '2. Use the "page looks correct" step in features', '3. bundle exec cucumber  &&  npx testivai report'],
 };
 
-function isPlaywrightProject(cwd: string): boolean {
+export function isPlaywrightProject(cwd: string): boolean {
   const pkgPath = path.join(cwd, 'package.json');
   if (!fs.existsSync(pkgPath)) return false;
   try {
@@ -83,6 +83,48 @@ function isPlaywrightProject(cwd: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Scaffold a Playwright project: `.testivai/config.json`, the baselines
+ * directory, and the .gitignore entries.
+ *
+ * This is the no-account setup — deliberately NOT the CDP
+ * `browserPort` sidecar config, which does not apply to the Playwright
+ * reporter flow. Idempotent: an existing config is left untouched unless
+ * `force` is set. Returns the list of paths created/updated.
+ */
+export function scaffoldPlaywrightLocal(cwd: string, force = false): string[] {
+  const created: string[] = [];
+
+  if (force || !localConfigExists(cwd)) {
+    createDefaultConfig(cwd);
+    created.push('.testivai/config.json');
+  }
+
+  // Race-free: mkdir recursive never throws on an existing dir and returns the
+  // first path it created (undefined if it already existed) — no check-then-act.
+  const baselinesDir = path.join(cwd, '.testivai', 'baselines');
+  if (fs.mkdirSync(baselinesDir, { recursive: true })) {
+    created.push('.testivai/baselines/');
+  }
+
+  // Race-free: read-or-empty instead of exists-then-read; appendFileSync
+  // creates the file when it's absent, so no separate write branch is needed.
+  const gitignorePath = path.join(cwd, '.gitignore');
+  const block = '\n# TestivAI local mode\n.testivai/temp/\nvisual-report/\n';
+  let existing = '';
+  try {
+    existing = fs.readFileSync(gitignorePath, 'utf-8');
+  } catch {
+    existing = '';
+  }
+  if (!existing.includes('.testivai/temp/')) {
+    fs.appendFileSync(gitignorePath, block);
+    created.push('.gitignore');
+  }
+
+  return created;
 }
 
 function printBox(lines: string[]): void {
@@ -99,9 +141,45 @@ export const initCommand = new Command('init')
   .description('Initialize TestivAI Witness SDK in your project')
   .option('-f, --force', 'Overwrite existing configuration files')
   .option('-y, --yes',   'Skip prompts and use auto-detected framework')
+  .option('--json',      'Print a machine-readable result to stdout (Playwright projects)')
   .action(async (options) => {
     try {
       const cwd = process.cwd();
+
+      // ── Playwright projects: dedicated reporter + local mode ──────────────
+      // Detect FIRST — before --yes / framework detection — so a Playwright
+      // repo always gets the reporter flow and .testivai/config.json, never
+      // the CDP browserPort sidecar config.
+      if (isPlaywrightProject(cwd)) {
+        const created = scaffoldPlaywrightLocal(cwd, options.force ?? false);
+        if (options.json) {
+          process.stdout.write(
+            JSON.stringify({ framework: 'playwright', created }) + '\n',
+          );
+          return; // exit 0
+        }
+        console.log();
+        console.log(chalk.green.bold('  ✓ TestivAI is set up for Playwright (local mode).'));
+        if (created.length > 0) {
+          for (const f of created) console.log(chalk.green(`  ✓ ${f}`));
+        } else {
+          console.log(chalk.gray('  (already configured — nothing to change)'));
+        }
+        console.log();
+        console.log(chalk.cyan('  1. Add the reporter to playwright.config.ts:'));
+        console.log(chalk.gray('       reporter: [') + chalk.white("['list'], ['@testivai/witness-playwright/reporter']") + chalk.gray('],'));
+        console.log();
+        console.log(chalk.cyan('  2. Capture a snapshot in a test:'));
+        console.log(chalk.gray("       import { witness } from '@testivai/witness-playwright';"));
+        console.log(chalk.gray("       await witness(page, testInfo, 'homepage');"));
+        console.log();
+        console.log(chalk.cyan('  3. Run, review, approve:'));
+        console.log(chalk.gray('       npx playwright test'));
+        console.log(chalk.gray('       open visual-report/index.html'));
+        console.log(chalk.gray('       npx testivai approve --all   # then commit .testivai/baselines/'));
+        console.log();
+        return; // exit 0
+      }
 
       // ── Auto-detect mode (--yes flag) ─────────────────────────────────────
       if (options.yes) {
@@ -113,30 +191,17 @@ export const initCommand = new Command('init')
         }
         generateConfig(options.force ?? false, cwd);
         console.log(chalk.cyan('\n=== Framework Setup Instructions ==='));
-        detection.instructions.forEach((line) => console.log(line));
+        for (const line of detection.instructions) console.log(line);
         console.log(chalk.cyan('\n=== General Setup ==='));
         console.log(`
-1. Authenticate with your API key:
-   ${chalk.yellow('testivai auth <your-api-key>')}
-
-2. Run your tests:
+1. Run your tests:
    ${chalk.yellow('testivai run "your-test-command"')}
 
-${chalk.gray('For more information, see: https://docs.testiv.ai')}
+2. Review the report at ${chalk.yellow('visual-report/index.html')}
+
+${chalk.gray('For more information, see: https://testiv.ai/docs/')}
         `);
         logger.success('Initialization complete!');
-        return;
-      }
-
-      // ── Playwright early-exit ──────────────────────────────────────────────
-      if (isPlaywrightProject(cwd)) {
-        console.log();
-        console.log(chalk.yellow('⚠  Playwright detected in this project.'));
-        console.log();
-        console.log('For Playwright, use the dedicated SDK instead:');
-        console.log(chalk.cyan('  npm install @testivai/witness-playwright'));
-        console.log(chalk.gray('  Docs: https://testiv.ai/docs#playwright'));
-        console.log();
         return;
       }
 
@@ -154,15 +219,15 @@ ${chalk.gray('For more information, see: https://docs.testiv.ai')}
           name: 'mode',
           message: 'Select mode:',
           choices: [
-            { name: 'Local (free) — visual diffs on your machine, HTML reports', value: 'local' },
-            { name: 'Cloud — AI-powered analysis, team dashboard, CI integration', value: 'cloud' },
+            { name: 'Playwright / local — visual diffs on your machine, HTML report', value: 'local' },
+            { name: 'Other framework (Cypress, Selenium, Puppeteer, …) — generate CLI helper files', value: 'sidecar' },
           ],
         },
       ]);
 
       if (mode === 'local') {
         // Create .testivai/config.json and baselines directory
-        const config = createDefaultConfig(cwd, { mode: 'local' });
+        const _config = createDefaultConfig(cwd);
         const baselinesDir = path.join(cwd, '.testivai', 'baselines');
         fs.mkdirSync(baselinesDir, { recursive: true });
 
@@ -195,13 +260,13 @@ ${chalk.gray('For more information, see: https://docs.testiv.ai')}
           '3. Review the HTML report',
           '4. Approve: npx testivai approve --all',
           '',
-          'Docs: https://testiv.ai/docs#local-mode',
+          'Docs: https://testiv.ai/docs/',
         ]);
         console.log();
         return;
       }
 
-      // ── Cloud mode: continue with existing flow ──────────────────────────
+      // ── Sidecar setup: generate framework helper files + config ──────────
 
       const { language } = await inquirer.prompt([
         {
@@ -268,9 +333,8 @@ ${chalk.gray('For more information, see: https://docs.testiv.ai')}
 
       // ── Completion box ─────────────────────────────────────────────────────
       const steps = NEXT_STEPS[frameworkKey as string] ?? [
-        '1. npx testivai auth <your-api-key>',
-        '2. Add witness calls to your tests',
-        '3. npx testivai run "<your-test-command>"',
+        '1. Add witness calls to your tests',
+        '2. npx testivai run "<your-test-command>"',
       ];
 
       console.log();
@@ -279,7 +343,7 @@ ${chalk.gray('For more information, see: https://docs.testiv.ai')}
         '',
         ...steps,
         '',
-        `Docs: https://testiv.ai/docs#${(frameworkKey as string).split('-')[0]}`,
+        'Docs: https://testiv.ai/docs/',
       ]);
       console.log();
 

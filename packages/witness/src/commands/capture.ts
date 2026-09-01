@@ -2,17 +2,42 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { BrowserClient } from '../browser/client';
 import { BrowserCapture } from '../browser/capture';
-import { BrowserDiscovery, BrowserDiscoveryError } from '../browser/discovery';
+import { BrowserDiscoveryError } from '../browser/discovery';
 import { logger } from '../utils/logger';
 import { toSafeFilename } from '../utils/file-naming';
 
 export const witnessCommand = new Command('witness')
-  .description('Witness a single visual snapshot')
-  .argument('<name>', 'Snapshot name')
+  .description(
+    'Witness visual snapshots. Pass a URL (http/https) to capture a running app with no test suite — ' +
+      'pages are crawled or taken from --pages/config; baselines, report, and approvals work as usual. ' +
+      'Pass a name to capture a single snapshot from an already-running debuggable Chrome.',
+  )
+  .argument('<name-or-url>', 'A URL for standalone capture, or a snapshot name (sidecar mode)')
   .option('-p, --port <number>', 'Chrome remote debugging port')
-  .option('-o, --output <path>', 'Output directory for captured files', '.testivai/witnesses')
-  .option('-f, --format <format>', 'Output format (json|png)', 'json')
+  .option('-o, --output <path>', 'Output directory for captured files (sidecar mode)', '.testivai/witnesses')
+  .option('-f, --format <format>', 'Output format (json|png) (sidecar mode)', 'json')
+  .option('--pages <paths>', 'Standalone: comma-separated page paths (e.g. "/,/pricing"); disables crawling')
+  .option('--max-pages <n>', 'Standalone: crawl cap when discovering links (default 10)')
+  .option('--viewport <WxH>', 'Standalone: capture viewport (default 1280x800)')
   .action(async (name, options) => {
+    // Standalone mode: `testivai witness http://localhost:3000`
+    if (/^https?:\/\//i.test(name)) {
+      const { runStandaloneWitness } = await import('../standalone/run');
+      const { parseViewport } = await import('../standalone/crawl');
+      try {
+        await runStandaloneWitness(name, {
+          pages: options.pages ? String(options.pages).split(',') : undefined,
+          maxPages: options.maxPages ? parseInt(options.maxPages, 10) : undefined,
+          viewport: options.viewport ? parseViewport(options.viewport) : undefined,
+          port: options.port ? parseInt(options.port, 10) : undefined,
+        });
+      } catch (error) {
+        logger.error('Standalone witness failed:', error);
+        process.exit(1);
+      }
+      return;
+    }
+
     let client: BrowserClient | null = null;
 
     try {

@@ -37,17 +37,19 @@ testivai run "bundle exec rspec"
 
 ## How It Works
 
-1. Starts your test command as a child process
-2. Waits for Chrome to open `--remote-debugging-port=9222`
+1. Starts your test command as a child process, with `TESTIVAI_MODE=local` and the debugging port exported into its environment
+2. Waits for Chrome to open `--remote-debugging-port=9222` (retries for up to 60s)
 3. Connects via browser WebSocket
 4. Injects `window.testivaiWitness` globally
 5. Each `witness()` call triggers a full snapshot capture
-6. Uploads the batch to TestivAI when tests complete
+6. When the test command exits, compares the captures against `.testivai/baselines/` and writes the HTML report + `results.json` to `visual-report/` — everything stays on disk
+
+The command exits with your test command's exit code, or `1` when
+`failOnDiff` is set in `.testivai/config.json` and snapshots changed.
 
 ## Options
 
 | Flag | Description |
 |---|---|
-| `--project <id>` | Override the project ID from `testivai.config.ts` |
-| `--branch <name>` | Override the branch name (defaults to current git branch) |
-| `--debug` | Print verbose browser connection logs |
+| `-p, --port <number>` | Chrome remote debugging port (default `9222`) |
+| `--debug` | Enable debug logging for snapshots |

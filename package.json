@@ -6,11 +6,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/mcbuddy/testivai-oss.git"
+    "url": "git+https://github.com/testivai/testivai-oss.git"
   },
-  "homepage": "https://github.com/mcbuddy/testivai-oss#readme",
+  "homepage": "https://github.com/testivai/testivai-oss#readme",
   "bugs": {
-    "url": "https://github.com/mcbuddy/testivai-oss/issues"
+    "url": "https://github.com/testivai/testivai-oss/issues"
   },
   "engines": {
     "node": ">=18.0.0"
@@ -25,9 +25,16 @@
     "e2e": "pnpm --filter @testivai-oss/e2e run test",
     "changeset": "changeset",
     "version-packages": "changeset version && pnpm install --lockfile-only",
-    "release": "pnpm build && changeset publish"
+    "release": "pnpm build && changeset publish",
+    "lint": "biome lint"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.5.8",
     "@changesets/cli": "^2.31.0",
     "typescript": "^6.0.3"
   }

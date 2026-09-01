@@ -1,0 +1,71 @@
+{
+  "name": "@testivai/witness-selenium",
+  "version": "0.3.2",
+  "description": "Selenium WebDriver adapter for TestivAI Witness — local-first visual regression with pixel + DOM comparison",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build",
+    "test": "jest",
+    "test:unit": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage"
+  },
+  "keywords": [
+    "selenium",
+    "selenium-webdriver",
+    "visual-regression",
+    "testing",
+    "screenshot-testing",
+    "testivai"
+  ],
+  "author": "TestivAI",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/testivai/testivai-oss.git",
+    "directory": "packages/selenium"
+  },
+  "bugs": {
+    "url": "https://github.com/testivai/testivai-oss/issues"
+  },
+  "homepage": "https://github.com/testivai/testivai-oss/tree/main/packages/selenium#readme",
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "selenium-webdriver": ">=4.6.0"
+  },
+  "peerDependenciesMeta": {
+    "selenium-webdriver": {
+      "optional": false
+    }
+  },
+  "dependencies": {
+    "@testivai/witness": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/node": "^20.0.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
+    "typescript": "^6.0.3"
+  }
+}

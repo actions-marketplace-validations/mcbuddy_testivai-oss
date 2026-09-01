@@ -25,7 +25,8 @@ describe('domDiff', () => {
       const candidate = '<div><p>One</p><p>Two</p></div>';
       const result = domDiff(baseline, candidate);
       expect(result.domChanged).toBe(true);
-      expect(result.summary).toEqual({ added: 1, removed: 0, attributeChanges: 0 });
+      // the new <p>'s text ("Two") also registers as a text change
+      expect(result.summary).toEqual({ added: 1, removed: 0, attributeChanges: 0, textChanges: 1 });
     });
 
     test('detects removed elements', () => {
@@ -33,7 +34,7 @@ describe('domDiff', () => {
       const candidate = '<div><p>One</p></div>';
       const result = domDiff(baseline, candidate);
       expect(result.domChanged).toBe(true);
-      expect(result.summary).toEqual({ added: 0, removed: 1, attributeChanges: 0 });
+      expect(result.summary).toEqual({ added: 0, removed: 1, attributeChanges: 0, textChanges: 1 });
     });
 
     test('detects mixed add/remove (different tag types)', () => {
@@ -53,7 +54,7 @@ describe('domDiff', () => {
       const candidate = '<button class="secondary">Go</button>';
       const result = domDiff(baseline, candidate);
       expect(result.domChanged).toBe(true);
-      expect(result.summary).toEqual({ added: 0, removed: 0, attributeChanges: 1 });
+      expect(result.summary).toEqual({ added: 0, removed: 0, attributeChanges: 1, textChanges: 0 });
     });
 
     test('detects added attribute', () => {
@@ -79,10 +80,19 @@ describe('domDiff', () => {
   });
 
   describe('text content', () => {
-    test('ignores text content changes', () => {
+    test('detects text content changes', () => {
       const baseline = '<p>Hello world</p>';
       const candidate = '<p>Goodbye world</p>';
-      // Text-only changes are pixel territory, not DOM territory.
+      // A wording edit is a real UI change — with noiseAutoPass enabled, a
+      // text-blind DOM diff would silently auto-pass it.
+      const result = domDiff(baseline, candidate);
+      expect(result.domChanged).toBe(true);
+      expect(result.summary).toEqual({ added: 0, removed: 0, attributeChanges: 0, textChanges: 1 });
+    });
+
+    test('ignores script and style bodies', () => {
+      const baseline = '<div><script>var a = 1;</script><style>.x{color:red}</style><p>Hi</p></div>';
+      const candidate = '<div><script>var a = 2;</script><style>.x{color:blue}</style><p>Hi</p></div>';
       expect(domDiff(baseline, candidate)).toEqual({ domChanged: false, summary: null });
     });
 
@@ -175,5 +185,46 @@ describe('domDiff', () => {
       expect(result.summary?.added).toBe(1);
       expect(result.summary?.attributeChanges).toBe(1);
     });
+  });
+});
+
+describe('volatile attributes (per-run URL churn)', () => {
+  const { domDiff } = require('../diff/dom-diff');
+
+  it('blob: URLs are always normalized — no attributeChanges, noise hint survives', () => {
+    const a = '<div><img src="blob:https://app/1111-aaaa"></div>';
+    const b = '<div><img src="blob:https://app/2222-bbbb"></div>';
+    const r = domDiff(a, b);
+    expect(r.domChanged).toBe(false);
+    expect(r.summary?.attributeChanges ?? 0).toBe(0);
+  });
+
+  it('data: URIs stay significant (content-addressed)', () => {
+    const a = '<img src="data:image/png;base64,AAAA">';
+    const b = '<img src="data:image/png;base64,BBBB">';
+    const r = domDiff(a, b);
+    expect(r.domChanged).toBe(true);
+  });
+
+  it('http src change counts by default', () => {
+    const a = '<img src="https://cdn/x.1.png">';
+    const b = '<img src="https://cdn/x.2.png">';
+    expect(domDiff(a, b).domChanged).toBe(true);
+  });
+
+  it('volatileAttributes ignores the value but keeps presence', () => {
+    const a = '<img src="https://cdn/x.1.png">';
+    const b = '<img src="https://cdn/x.2.png">';
+    const r = domDiff(a, b, { volatileAttributes: ['src'] });
+    expect(r.domChanged).toBe(false);
+    // removing the attribute entirely is still a change
+    const r2 = domDiff(a, '<img>', { volatileAttributes: ['src'] });
+    expect(r2.domChanged).toBe(true);
+  });
+
+  it('volatileAttributes is case-insensitive', () => {
+    const a = '<img SRC="https://cdn/x.1.png">';
+    const b = '<img src="https://cdn/x.2.png">';
+    expect(domDiff(a, b, { volatileAttributes: ['SRC'] }).domChanged).toBe(false);
   });
 });

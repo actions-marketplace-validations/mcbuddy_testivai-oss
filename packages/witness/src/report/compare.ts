@@ -9,13 +9,98 @@ import * as path from 'path';
 import { PNG } from 'pngjs';
 import { diff as diffEngine } from '../diff';
 import { domDiff } from '../diff/dom-diff';
-import { BaselineStore } from '../baselines/store';
-import { SnapshotDomSignal, SnapshotResult, SnapshotStatus } from './results';
+import { BaselineStore, resolveBaselinesDir } from '../baselines/store';
+import type { SnapshotDomSignal, SnapshotResult, SnapshotStatus } from './results';
+import {
+  type CapturedMaskRect,
+  type MaskSpec,
+  resolveMasks,
+} from '../diff/mask';
+import type { RegionOptions } from '../diff/types';
+import {
+  attributeRegions,
+  compareStyleHashes,
+  detectPageShift,
+  parseElementMap,
+  type ElementMapEntry,
+} from '../diff/attribution';
 
 export interface CompareOptions {
   threshold?: number;
   projectRoot: string;
   reportDir: string;
+  /**
+   * Pass criteria — how much visual difference still counts as passed.
+   * Defaults preserve strict behavior: any pixel the diff engine flags
+   * marks the snapshot changed.
+   */
+  passCriteria?: PassCriteria;
+  /**
+   * Global masks (from .testivai/config.json `mask`). Merged with any
+   * per-call masks recorded in the capture's metadata.
+   */
+  mask?: MaskSpec[];
+  /** Region clustering tunables (config `diffRegions`). */
+  diffRegions?: RegionOptions;
+  /**
+   * Attribute names whose values are ignored by the DOM diff (config
+   * `volatileAttributes`) — for per-run URLs in `src`/`srcset`/`href`
+   * that would otherwise poison the noise hint.
+   */
+  volatileAttributes?: string[];
+}
+
+/** The mask-related slice of a capture's metadata.json (all optional). */
+interface CaptureMaskMetadata {
+  /** Per-call geometric/selector mask specs recorded by the adapter. */
+  masks?: MaskSpec[];
+  /** Per-call selector masks (kept separate for the audit trail). */
+  maskSelectors?: string[];
+  /** Selector geometry captured via getBoundingClientRect at capture time. */
+  maskRects?: CapturedMaskRect[];
+}
+
+function readElementMap(projectRoot: string, kind: 'baselines' | 'temp', name: string): ElementMapEntry[] {
+  const p =
+    kind === 'baselines'
+      ? path.join(resolveBaselinesDir(projectRoot), name, 'elements.json')
+      : path.join(projectRoot, '.testivai', 'temp', name, 'elements.json');
+  try {
+    return parseElementMap(JSON.parse(fs.readFileSync(p, 'utf-8')));
+  } catch {
+    return []; // absent or malformed map never breaks the compare
+  }
+}
+
+function readTempMaskMetadata(projectRoot: string, name: string): CaptureMaskMetadata {
+  const metaPath = path.join(projectRoot, '.testivai', 'temp', name, 'metadata.json');
+  try {
+    const parsed = JSON.parse(fs.readFileSync(metaPath, 'utf-8'));
+    return parsed && typeof parsed === 'object' ? (parsed as CaptureMaskMetadata) : {};
+  } catch {
+    return {}; // absent or malformed metadata never breaks the compare
+  }
+}
+
+export interface PassCriteria {
+  /** Pass when diff percentage (0-100) is at or below this. Default 0. */
+  maxDiffPercent?: number;
+  /** Pass when changed-pixel count is at or below this. Unset = ignored. */
+  maxDiffPixels?: number;
+  /** Auto-pass DOM-identical diffs (the noise hint) up to noiseMaxDiffPercent. Default false. */
+  noiseAutoPass?: boolean;
+  /** Upper bound (diff %, 0-100) for noiseAutoPass. Default 1. */
+  noiseMaxDiffPercent?: number;
+  /**
+   * Layout tolerance in px: auto-pass a changed snapshot when EVERY diff
+   * region is a pure element shift (classification 'shift' — content
+   * unchanged, element just moved) of at most this many pixels in each
+   * axis. Kills sub-pixel/rounding layout jitter without masking content
+   * changes: any region classified 'change', any unattributed region, or
+   * any shift beyond the tolerance keeps the snapshot 'changed'.
+   * Unset/0 = off.
+   */
+  shiftTolerance?: number;
 }
 
 /**
@@ -24,7 +109,7 @@ export interface CompareOptions {
  * @returns Array of SnapshotResult for each snapshot
  */
 export function compareAll(options: CompareOptions): SnapshotResult[] {
-  const { projectRoot, reportDir, threshold = 0.1 } = options;
+  const { projectRoot, reportDir, threshold = 0.1, passCriteria = {}, diffRegions } = options;
   const store = new BaselineStore(projectRoot);
   const tempNames = store.listTemp();
   const results: SnapshotResult[] = [];
@@ -66,13 +151,29 @@ export function compareAll(options: CompareOptions): SnapshotResult[] {
     // screenshots from the browser, we need to handle the PNG decoding.
     // For simplicity and zero-dep, we do a byte-level comparison first,
     // then fall back to diff engine for actual pixel data.
+    const captureMeta = readTempMaskMetadata(projectRoot, name);
     const result = compareBuffers(
       baselineBuffer,
       tempBuffer,
       name,
       snapshotImagesDir,
       threshold,
+      {
+        configMasks: options.mask ?? [],
+        callMasks: [
+          ...(captureMeta.masks ?? []),
+          ...(captureMeta.maskSelectors ?? []),
+        ],
+        capturedRects: captureMeta.maskRects,
+        regionOptions: diffRegions,
+      },
     );
+
+    // Baseline provenance: when this baseline was last approved/added.
+    const baselineMeta = store.readMetadata(name);
+    if (baselineMeta) {
+      result.baselineApprovedAt = baselineMeta.updatedAt ?? baselineMeta.createdAt;
+    }
 
     // DOM-level noise hint. Only meaningful when both sides captured DOM.
     // For 'passed' (pixel-identical) we skip the work — it's already the
@@ -80,16 +181,102 @@ export function compareAll(options: CompareOptions): SnapshotResult[] {
     if (result.status === 'changed') {
       const baselineDom = store.readDom(name);
       const candidateDom = store.readTempDom(name);
-      const domSignal = computeDomSignal(baselineDom, candidateDom);
+      const domSignal = computeDomSignal(baselineDom, candidateDom, options.volatileAttributes);
+
+      // Element attribution + shift classification (element maps are
+      // optional; without them regions pass through untouched).
+      const baselineElements = readElementMap(projectRoot, 'baselines', name);
+      const candidateElements = readElementMap(projectRoot, 'temp', name);
+
+      // Style fingerprint: a stylesheet-only change has an identical DOM
+      // but different computed styles — pixels + identical DOM used to
+      // read as "likely render noise" (a documented false negative).
+      // The hint now requires the style digests to match; a mismatch is
+      // surfaced as an explicit, attributed "styles changed" signal.
       if (domSignal) {
+        const styleComparison = compareStyleHashes(baselineElements, candidateElements);
+        domSignal.styleCheck = styleComparison.status;
+        if (styleComparison.status === 'mismatch') {
+          domSignal.styleChanges = {
+            count: styleComparison.changed.length,
+            elements: styleComparison.changed.slice(0, 10),
+          };
+          domSignal.noiseHint = false;
+        }
         result.dom = domSignal;
       }
+      if (result.regions && result.regions.length > 0) {
+        result.regions = attributeRegions(result.regions, baselineElements, candidateElements);
+      }
+      const pageShift = detectPageShift(baselineElements, candidateElements);
+      if (pageShift) {
+        result.pageShift = pageShift;
+      }
+
+      applyPassCriteria(result, passCriteria);
     }
 
     results.push(result);
   }
 
   return results;
+}
+
+/**
+ * Turn a 'changed' result into 'passed' when it satisfies the configured
+ * pass criteria. Mutates the result: status flips to 'passed' and
+ * `autoPassed` records which criterion applied (except for a zero-count
+ * diff — byte-different but nothing the diff engine flags — which is
+ * simply passed). Diff images are kept either way.
+ */
+export function applyPassCriteria(result: SnapshotResult, criteria: PassCriteria): void {
+  const {
+    maxDiffPercent = 0,
+    maxDiffPixels,
+    noiseAutoPass = false,
+    noiseMaxDiffPercent = 1,
+    shiftTolerance = 0,
+  } = criteria;
+
+  // Nothing above the per-pixel threshold: visually identical. Guard on
+  // totalPixels — the PNG-decode-failure path reports diffCount 0 with
+  // totalPixels 0 and must stay 'changed' for manual investigation.
+  if (result.diffCount === 0 && result.totalPixels > 0) {
+    result.status = 'passed';
+    result.diffPercent = 0;
+    return;
+  }
+
+  const withinPercent = result.diffPercent <= maxDiffPercent;
+  const withinPixels = maxDiffPixels !== undefined && result.diffCount <= maxDiffPixels;
+  if (withinPercent || withinPixels) {
+    result.status = 'passed';
+    result.autoPassed = 'threshold';
+    return;
+  }
+
+  if (noiseAutoPass && result.dom?.noiseHint && result.diffPercent <= noiseMaxDiffPercent) {
+    result.status = 'passed';
+    result.autoPassed = 'noise';
+    return;
+  }
+
+  // Layout tolerance: every region must be a verified pure shift within
+  // the per-axis bound. Requires attribution (element maps) — regions
+  // without a 'shift' classification are treated as real changes.
+  if (shiftTolerance > 0 && result.regions && result.regions.length > 0) {
+    const allSmallShifts = result.regions.every(
+      (r) =>
+        r.classification === 'shift' &&
+        r.shift !== undefined &&
+        Math.abs(r.shift.dx) <= shiftTolerance &&
+        Math.abs(r.shift.dy) <= shiftTolerance,
+    );
+    if (allSmallShifts) {
+      result.status = 'passed';
+      result.autoPassed = 'shift';
+    }
+  }
 }
 
 /**
@@ -102,15 +289,28 @@ export function compareAll(options: CompareOptions): SnapshotResult[] {
 function computeDomSignal(
   baselineDom: string | null,
   candidateDom: string | null,
+  volatileAttributes?: string[],
 ): SnapshotDomSignal | null {
   if (!baselineDom || !candidateDom) return null;
-  const result = domDiff(baselineDom, candidateDom);
+  const result = domDiff(baselineDom, candidateDom, { volatileAttributes });
   return {
     changed: result.domChanged,
     summary: result.summary,
     // The whole point: pixels differ, DOM does not → likely render noise.
     noiseHint: !result.domChanged,
   };
+}
+
+/**
+ * Read a PNG's dimensions from its IHDR header without a full decode.
+ * Returns null for anything that doesn't look like a PNG.
+ */
+function readPngDims(buffer: Buffer): { width: number; height: number } | null {
+  // PNG signature (8 bytes) + IHDR length/type (8) → width at 16, height at 20
+  if (buffer.length < 24 || buffer.readUInt32BE(12) !== 0x49484452 /* 'IHDR' */) {
+    return null;
+  }
+  return { width: buffer.readUInt32BE(16), height: buffer.readUInt32BE(20) };
 }
 
 /**
@@ -136,16 +336,24 @@ function encodePng(data: Buffer, width: number, height: number): Buffer {
  * Decodes both PNGs to raw RGBA, runs the pixel-level diff engine,
  * writes a valid diff PNG, and returns a SnapshotResult.
  */
+interface CompareMaskContext {
+  configMasks: MaskSpec[];
+  callMasks: MaskSpec[];
+  capturedRects?: CapturedMaskRect[];
+  regionOptions?: RegionOptions;
+}
+
 function compareBuffers(
   baselineBuffer: Buffer,
   candidateBuffer: Buffer,
   name: string,
   snapshotImagesDir: string,
   threshold: number,
+  maskContext: CompareMaskContext = { configMasks: [], callMasks: [] },
 ): SnapshotResult {
   // Quick byte-level comparison — identical files need no decoding
   if (baselineBuffer.equals(candidateBuffer)) {
-    return {
+    const result: SnapshotResult = {
       name,
       status: 'passed',
       diffPercent: 0,
@@ -154,6 +362,23 @@ function compareBuffers(
       baselinePath: `images/${name}/baseline.png`,
       currentPath: `images/${name}/current.png`,
     };
+    // Masks are moot for identical bytes, but the audit trail (and any
+    // could-not-apply warnings) must still surface. Header-only dims read.
+    const specCount = maskContext.configMasks.length + maskContext.callMasks.length;
+    if (specCount > 0) {
+      const dims = readPngDims(baselineBuffer);
+      if (dims) {
+        const fromConfig = resolveMasks(
+          maskContext.configMasks, dims.width, dims.height, maskContext.capturedRects, 'config');
+        const fromCall = resolveMasks(
+          maskContext.callMasks, dims.width, dims.height, maskContext.capturedRects, 'call');
+        const rects = [...fromConfig.rects, ...fromCall.rects];
+        const warnings = [...fromConfig.warnings, ...fromCall.warnings];
+        if (rects.length > 0) result.masks = rects;
+        if (warnings.length > 0) result.maskWarnings = warnings;
+      }
+    }
+    return result;
   }
 
   try {
@@ -176,27 +401,46 @@ function compareBuffers(
 
     const diffOutput = new Uint8ClampedArray(expectedLen);
 
-    const diffResult = diffEngine(baseline8, candidate8, diffOutput, width, height, { threshold });
+    // Resolve masks against this image's dimensions. Config and per-call
+    // specs are resolved separately so the audit trail records the origin.
+    const fromConfig = resolveMasks(
+      maskContext.configMasks, width, height, maskContext.capturedRects, 'config');
+    const fromCall = resolveMasks(
+      maskContext.callMasks, width, height, maskContext.capturedRects, 'call');
+    const maskRects = [...fromConfig.rects, ...fromCall.rects];
+    const maskWarnings = [...fromConfig.warnings, ...fromCall.warnings];
+
+    const diffResult = diffEngine(baseline8, candidate8, diffOutput, width, height, {
+      threshold,
+      masks: maskRects,
+      detectRegions: true,
+      regionOptions: maskContext.regionOptions,
+    });
 
     // Encode the diff RGBA back to a valid PNG and write it
     const diffPngBuffer = encodePng(Buffer.from(diffOutput.buffer), width, height);
     const diffPath = path.join(snapshotImagesDir, 'diff.png');
     fs.writeFileSync(diffPath, diffPngBuffer);
 
+    // Status starts as 'changed'; applyPassCriteria() in compareAll may
+    // flip it to 'passed' based on the configured tolerances.
     const status: SnapshotStatus = 'changed';
-    const diffPercent = diffResult.diffPercent > 0 ? diffResult.diffPercent : 0.01;
 
-    return {
+    const result: SnapshotResult = {
       name,
       status,
-      diffPercent,
+      diffPercent: diffResult.diffPercent,
       diffCount: diffResult.diffCount,
       totalPixels: diffResult.totalPixels,
       baselinePath: `images/${name}/baseline.png`,
       currentPath: `images/${name}/current.png`,
       diffPath: `images/${name}/diff.png`,
     };
-  } catch (err) {
+    if (diffResult.regions) result.regions = diffResult.regions;
+    if (maskRects.length > 0) result.masks = maskRects;
+    if (maskWarnings.length > 0) result.maskWarnings = maskWarnings;
+    return result;
+  } catch (_err) {
     // PNG decode failed (corrupt file, unexpected format) — report as changed
     // without a diff image so the user can investigate manually
     return {

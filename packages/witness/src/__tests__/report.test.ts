@@ -9,7 +9,7 @@ import { BaselineStore } from '../baselines/store';
 import { compareAll } from '../report/compare';
 import { generateReport } from '../report/generator';
 import { renderHtml } from '../report/template';
-import { ReportData } from '../report/results';
+import type { ReportData } from '../report/results';
 
 describe('Report Generator', () => {
   let tmpDir: string;
@@ -187,7 +187,7 @@ describe('Report Generator', () => {
   });
 
   describe('T3.9 - OSS noise warning in HTML report', () => {
-    it('should include the OSS mode notice in the sidebar', () => {
+    it('should include the pixel-exact notice in the sidebar', () => {
       generateReport({
         projectRoot: tmpDir,
         reportDir: 'visual-report',
@@ -200,8 +200,8 @@ describe('Report Generator', () => {
       );
 
       expect(html).toContain('oss-notice');
-      expect(html).toContain('OSS mode');
-      expect(html).toContain('pixel-exact');
+      expect(html).toContain('Pixel-exact');
+      expect(html).toContain('collapse'); // variable-height noise tip
     });
 
     it('should mention threshold config option in the notice', () => {
@@ -235,7 +235,7 @@ describe('Report Generator', () => {
       expect(html).toContain('ignoreSelectors');
     });
 
-    it('should include a link to TestivAI Cloud in the notice', () => {
+    it('points agents at the MCP server instead of a hosted-service upsell', () => {
       generateReport({
         projectRoot: tmpDir,
         reportDir: 'visual-report',
@@ -247,7 +247,11 @@ describe('Report Generator', () => {
         'utf-8',
       );
 
-      expect(html).toContain('https://testiv.ai');
+      expect(html).toContain('@testivai/mcp');
+      expect(html).toContain('explain_snapshot');
+      // The cloud upsell is gone from the report entirely.
+      expect(html).not.toContain('TestivAI Cloud');
+      expect(html).not.toContain('AI-powered');
     });
 
     it('should render the renderHtml template with OSS notice directly', () => {
@@ -261,10 +265,295 @@ describe('Report Generator', () => {
       const html = renderHtml(data);
 
       expect(html).toContain('oss-notice');
-      expect(html).toContain('OSS mode');
+      expect(html).toContain('Pixel-exact');
       expect(html).toContain('ignoreSelectors');
       expect(html).toContain('threshold');
-      expect(html).toContain('testiv.ai');
+      expect(html).toContain('@testivai/mcp');
     });
+  });
+
+  describe('pass criteria', () => {
+    const { PNG } = require('pngjs');
+
+    /** Build a WxH solid PNG, then let paint() recolor individual pixels. */
+    const makePng = (
+      w: number,
+      h: number,
+      base: [number, number, number],
+      paint?: (data: Buffer) => void,
+    ): Buffer => {
+      const png = new PNG({ width: w, height: h });
+      for (let i = 0; i < w * h; i++) {
+        png.data[i * 4] = base[0];
+        png.data[i * 4 + 1] = base[1];
+        png.data[i * 4 + 2] = base[2];
+        png.data[i * 4 + 3] = 255;
+      }
+      if (paint) paint(png.data);
+      return PNG.sync.write(png);
+    };
+
+    const GRAY: [number, number, number] = [120, 120, 120];
+    // 10x10 = 100 pixels; repainting one pixel = 1% diff
+    const baselinePng = () => makePng(10, 10, GRAY);
+    // 9 red pixels out of 100 = 9% diff (enough to clear the engine's
+    // cumulatedThreshold, which absorbs near-zero total luminance change)
+    const blockOff = () =>
+      makePng(10, 10, GRAY, (d) => {
+        for (let i = 0; i < 9; i++) {
+          d[i * 4] = 255; d[i * 4 + 1] = 0; d[i * 4 + 2] = 0;
+        }
+      });
+
+    it('keeps strict behavior by default: any flagged pixel = changed', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({ projectRoot: tmpDir, reportDir, threshold: 0.1 });
+
+      expect(results[0].status).toBe('changed');
+      expect(results[0].autoPassed).toBeUndefined();
+    });
+
+    it('passes within maxDiffPercent and labels it', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({
+        projectRoot: tmpDir,
+        reportDir,
+        threshold: 0.1,
+        passCriteria: { maxDiffPercent: 10 },
+      });
+
+      expect(results[0].status).toBe('passed');
+      expect(results[0].autoPassed).toBe('threshold');
+      expect(results[0].diffPercent).toBeGreaterThan(0);
+    });
+
+    it('passes within maxDiffPixels', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({
+        projectRoot: tmpDir,
+        reportDir,
+        threshold: 0.1,
+        passCriteria: { maxDiffPixels: 9 },
+      });
+
+      expect(results[0].status).toBe('passed');
+      expect(results[0].autoPassed).toBe('threshold');
+    });
+
+    it('stays changed above maxDiffPercent', () => {
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const results = compareAll({
+        projectRoot: tmpDir,
+        reportDir,
+        threshold: 0.1,
+        passCriteria: { maxDiffPercent: 0.5 },
+      });
+
+      expect(results[0].status).toBe('changed');
+    });
+
+    it('treats byte-different but visually identical images as passed', () => {
+      // Color delta far below the per-pixel threshold: bytes differ, no pixel flagged
+      store.write('page', baselinePng());
+      store.writeTemp('page', makePng(10, 10, [121, 120, 120]));
+
+      const results = compareAll({ projectRoot: tmpDir, reportDir, threshold: 0.1 });
+
+      expect(results[0].status).toBe('passed');
+      expect(results[0].diffPercent).toBe(0);
+      expect(results[0].autoPassed).toBeUndefined();
+    });
+
+    describe('noiseAutoPass', () => {
+      const DOM = '<html><body><p>stable</p></body></html>';
+
+      it('auto-passes DOM-identical small diffs when enabled', () => {
+        store.write('page', baselinePng(), undefined, DOM);
+        store.writeTemp('page', blockOff(), DOM);
+
+        const results = compareAll({
+          projectRoot: tmpDir,
+          reportDir,
+          threshold: 0.1,
+          passCriteria: { noiseAutoPass: true, noiseMaxDiffPercent: 10 },
+        });
+
+        expect(results[0].status).toBe('passed');
+        expect(results[0].autoPassed).toBe('noise');
+        expect(results[0].dom?.noiseHint).toBe(true);
+      });
+
+      it('does not auto-pass when the DOM changed', () => {
+        store.write('page', baselinePng(), undefined, DOM);
+        store.writeTemp('page', blockOff(), '<html><body><p>edited</p><span>new</span></body></html>');
+
+        const results = compareAll({
+          projectRoot: tmpDir,
+          reportDir,
+          threshold: 0.1,
+          passCriteria: { noiseAutoPass: true, noiseMaxDiffPercent: 10 },
+        });
+
+        expect(results[0].status).toBe('changed');
+      });
+
+      it('does not auto-pass above noiseMaxDiffPercent', () => {
+        store.write('page', baselinePng(), undefined, DOM);
+        store.writeTemp('page', blockOff(), DOM);
+
+        const results = compareAll({
+          projectRoot: tmpDir,
+          reportDir,
+          threshold: 0.1,
+          passCriteria: { noiseAutoPass: true, noiseMaxDiffPercent: 0.5 },
+        });
+
+        expect(results[0].status).toBe('changed');
+      });
+    });
+
+    it('generateReport reads pass criteria from .testivai/config.json', () => {
+      fs.mkdirSync(path.join(tmpDir, '.testivai'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tmpDir, '.testivai', 'config.json'),
+        JSON.stringify({ mode: 'local', threshold: 0.1, maxDiffPercent: 10 }),
+      );
+      store.write('page', baselinePng());
+      store.writeTemp('page', blockOff());
+
+      const report = generateReport({
+        projectRoot: tmpDir,
+        reportDir: 'visual-report',
+        autoOpen: false,
+      });
+
+      expect(report.summary.passed).toBe(1);
+      expect(report.summary.changed).toBe(0);
+      expect(report.snapshots[0].autoPassed).toBe('threshold');
+    });
+  });
+});
+
+describe('Missing-baselines coverage signal (schema 2.3.0)', () => {
+  let tmpDir2: string;
+  let store2: BaselineStore;
+  const PNG_A = Buffer.from('aaaa-fake-png-baseline');
+  const PNG_B = Buffer.from('bbbb-fake-png-different');
+
+  beforeEach(() => {
+    tmpDir2 = fs.mkdtempSync(path.join(os.tmpdir(), 'testivai-missing-'));
+    store2 = new BaselineStore(tmpDir2);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir2, { recursive: true, force: true });
+  });
+
+  it('reports baselines that received no capture', () => {
+    store2.write('guarded-page', PNG_A);   // baseline, no temp capture
+    store2.writeTemp('other-page', PNG_B); // captured
+
+    const data = generateReport({ projectRoot: tmpDir2, reportDir: 'visual-report', autoOpen: false });
+
+    expect(data.summary.missing).toBe(1);
+    expect(data.missingBaselines).toEqual(['guarded-page']);
+
+    const html = fs.readFileSync(path.join(tmpDir2, 'visual-report', 'index.html'), 'utf-8');
+    expect(html).toContain('missing-notice');
+    expect(html).toContain('guarded-page');
+  });
+
+  it('reports zero missing when every baseline is captured', () => {
+    store2.write('home', PNG_A);
+    store2.writeTemp('home', PNG_A);
+    const data = generateReport({ projectRoot: tmpDir2, reportDir: 'visual-report', autoOpen: false });
+    expect(data.summary.missing).toBe(0);
+    expect(data.missingBaselines).toEqual([]);
+  });
+});
+
+describe('generateShareFile — single-file share bundle', () => {
+  const { generateShareFile } = require('../report/generator');
+  let tmpDir3: string;
+  let store3: BaselineStore;
+
+  beforeEach(() => {
+    tmpDir3 = fs.mkdtempSync(path.join(os.tmpdir(), 'testivai-share-'));
+    store3 = new BaselineStore(tmpDir3);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir3, { recursive: true, force: true });
+  });
+
+  it('inlines report images as data URIs', () => {
+    store3.write('home', Buffer.from('aaaa-fake-png-baseline'));
+    store3.writeTemp('home', Buffer.from('bbbb-fake-png-different')); // changed -> images written
+    generateReport({ projectRoot: tmpDir3, reportDir: 'visual-report', autoOpen: false });
+
+    const sharePath = generateShareFile(path.join(tmpDir3, 'visual-report'));
+    const share = fs.readFileSync(sharePath, 'utf-8');
+
+    expect(sharePath.endsWith('share.html')).toBe(true);
+    expect(share).toContain('data:image/png;base64,');
+    expect(share).not.toMatch(/src="images\//);
+    expect(share).not.toMatch(/data-diff="images\//);
+  });
+});
+
+describe('baseline provenance (baselineApprovedAt)', () => {
+  let tmp4: string;
+  let store4: BaselineStore;
+
+  beforeEach(() => {
+    tmp4 = fs.mkdtempSync(path.join(os.tmpdir(), 'testivai-prov-'));
+    store4 = new BaselineStore(tmp4);
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmp4, { recursive: true, force: true });
+  });
+
+  it('results carry the baseline approval timestamp and the report shows it', () => {
+    store4.write('home', Buffer.from('aaaa'));
+    store4.writeTemp('home', Buffer.from('bbbb'));
+    const data = generateReport({ projectRoot: tmp4, reportDir: 'visual-report', autoOpen: false });
+
+    const snap = data.snapshots[0];
+    expect(snap.baselineApprovedAt).toBeTruthy();
+    expect(new Date(snap.baselineApprovedAt!).getTime()).not.toBeNaN();
+
+    const html = fs.readFileSync(path.join(tmp4, 'visual-report', 'index.html'), 'utf-8');
+    expect(html).toContain('baseline approved');
+  });
+
+  it('approve() refreshes the approval timestamp', () => {
+    store4.write('home', Buffer.from('aaaa'));
+    const before = store4.readMetadata('home')!.updatedAt;
+    store4.writeTemp('home', Buffer.from('bbbb'));
+    store4.approve('home');
+    const after = store4.readMetadata('home')!.updatedAt;
+    expect(new Date(after).getTime()).toBeGreaterThanOrEqual(new Date(before).getTime());
+  });
+});
+
+describe('uploadShareFile — storage-agnostic upload hook', () => {
+  const { uploadShareFile } = require('../report/generator');
+
+  it('runs the command with {file} substituted and returns the last stdout line', () => {
+    const url = uploadShareFile('echo uploading {file} && echo https://example.test/share/abc', '/tmp/share file.html');
+    expect(url).toBe('https://example.test/share/abc');
+  });
+
+  it('throws on a failing command', () => {
+    expect(() => uploadShareFile('exit 7', '/tmp/x.html')).toThrow();
   });
 });
